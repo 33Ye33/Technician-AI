@@ -1,0 +1,4 @@
+pytest>=7.0
+# Uncomment to add AI/LLM support:
+# openai>=1.0
+# anthropic>=0.20
