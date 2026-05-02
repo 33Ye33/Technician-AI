@@ -1,58 +1,71 @@
 <div class="answer">
-  <div class="text">{{ answer }}</div>
-
-  {% if sources %}
-  <div class="sources">
-    <strong>Sources</strong>
-    <ol>
-      {% for s in sources %}
-        <li>
-          {% if s.kind == 'manual_chunk' %}
-            MANUAL — {{ s.metadata.get('manual_title', 'unknown') }}{% if s.metadata.get('page') %}, p.{{ s.metadata.page }}{% elif s.metadata.get('slide') %}, slide {{ s.metadata.slide }}{% endif %}
-          {% else %}
-            KNOWLEDGE — field note
-          {% endif %}
-          {% if s.metadata.get('topic_path') %}
-            <span class="tag">{{ s.metadata.topic_path|join(' › ') }}{% if s.metadata.get('entry_type') %} / {{ s.metadata.entry_type }}{% endif %}</span>
-          {% endif %}
-          <em style="color:#888;">{{ s.preview }}{% if s.preview|length >= 200 %}…{% endif %}</em>
-        </li>
-      {% endfor %}
-    </ol>
+  <div class="answer-banner">
+    <span>Response · Conv #{{ conversation_id }}</span>
+    <span>{{ sources|length }} {{ 'source' if sources|length == 1 else 'sources' }} cited</span>
   </div>
-  {% endif %}
+  <div class="answer-body">
+    <div class="answer-text">{{ answer }}</div>
 
-  <div class="feedback" id="feedback-{{ conversation_id }}">
-    <button class="secondary"
+    {% if sources %}
+    <div class="sources">
+      <div class="sources-head">References</div>
+      {% for s in sources %}
+        <div class="src">
+          <div class="src-num">[#{{ s.index }}]</div>
+          <div class="src-body">
+            {% if s.kind == 'manual_chunk' %}
+              <span class="src-label">{{ s.metadata.get('title', s.metadata.get('manual_title', 'untitled')) }}</span>
+              <span class="src-meta"> — {{ s.metadata.get('manual_title', '?') }}{% if s.metadata.get('page') %} · p.{{ s.metadata.page }}{% elif s.metadata.get('slide') %} · slide {{ s.metadata.slide }}{% endif %}</span>
+            {% else %}
+              <span class="src-label">{{ s.metadata.get('title', 'Field note') }}</span>
+              <span class="src-meta"> — captured field knowledge</span>
+            {% endif %}
+            {% if s.metadata.get('topic_path') %}
+              <span class="tag" style="margin-left: 0.4rem;">{{ s.metadata.topic_path|join('/') }}</span>
+            {% endif %}
+            {% if s.metadata.get('entry_type') %}
+              <span class="tag tag-{{ s.metadata.entry_type }}">{{ s.metadata.entry_type }}</span>
+            {% endif %}
+            <span class="src-preview">{{ s.preview }}{% if s.preview|length >= 200 %}…{% endif %}</span>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="feedback" id="feedback-{{ conversation_id }}">
+      <span class="feedback-prompt">Mark outcome ▸</span>
+      <button class="btn btn-secondary"
+              hx-post="/feedback/{{ conversation_id }}"
+              hx-vals='{"kind": "worked"}'
+              hx-target="#feedback-{{ conversation_id }}"
+              hx-swap="outerHTML">
+        Worked
+      </button>
+      <button type="button" class="btn btn-ghost" data-toggle-learned="failed-form-{{ conversation_id }}">
+        Didn't work
+      </button>
+      <button type="button" class="btn btn-ghost" data-toggle-learned="learned-form-{{ conversation_id }}">
+        + Add field note
+      </button>
+
+      <form class="learned-form" id="failed-form-{{ conversation_id }}"
             hx-post="/feedback/{{ conversation_id }}"
-            hx-vals='{"kind": "worked"}'
             hx-target="#feedback-{{ conversation_id }}"
             hx-swap="outerHTML">
-      Worked
-    </button>
-    <button class="secondary" data-toggle-learned="failed-form-{{ conversation_id }}">
-      Didn't work
-    </button>
-    <button class="secondary" data-toggle-learned="learned-form-{{ conversation_id }}">
-      I learned something
-    </button>
+        <input type="hidden" name="kind" value="failed">
+        <input type="text" name="note" placeholder="What actually happened on the floor? What's the right answer?" required>
+        <button type="submit" class="btn">Save</button>
+      </form>
 
-    <form class="learned-form" id="failed-form-{{ conversation_id }}"
-          hx-post="/feedback/{{ conversation_id }}"
-          hx-target="#feedback-{{ conversation_id }}"
-          hx-swap="outerHTML">
-      <input type="hidden" name="kind" value="failed">
-      <input type="text" name="note" placeholder="What actually happened? What's the right answer?" required>
-      <button type="submit">Save</button>
-    </form>
-
-    <form class="learned-form" id="learned-form-{{ conversation_id }}"
-          hx-post="/feedback/{{ conversation_id }}"
-          hx-target="#feedback-{{ conversation_id }}"
-          hx-swap="outerHTML">
-      <input type="hidden" name="kind" value="learned">
-      <input type="text" name="note" placeholder="Field tip, gotcha, missing context…" required>
-      <button type="submit">Save</button>
-    </form>
+      <form class="learned-form" id="learned-form-{{ conversation_id }}"
+            hx-post="/feedback/{{ conversation_id }}"
+            hx-target="#feedback-{{ conversation_id }}"
+            hx-swap="outerHTML">
+        <input type="hidden" name="kind" value="learned">
+        <input type="text" name="note" placeholder="Field tip, gotcha, missing context — short and specific" required>
+        <button type="submit" class="btn">Save</button>
+      </form>
+    </div>
   </div>
 </div>

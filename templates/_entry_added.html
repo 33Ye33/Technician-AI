@@ -1,5 +1,7 @@
 <div class="msg ok">
-  Saved as knowledge entry #{{ entry.id }}.
-  <div style="margin-top: 0.4rem;"><strong>{{ entry.question }}</strong></div>
-  <div style="margin-top: 0.2rem; white-space: pre-wrap;">{{ entry.answer }}</div>
+  <div style="font-weight: 600; margin-bottom: 0.4rem;">
+    ✓ Saved as knowledge entry #{{ entry.id }}
+  </div>
+  <div style="font-weight: 600; color: var(--success); margin-bottom: 0.2rem;">{{ entry.question }}</div>
+  <div style="color: var(--text-muted); white-space: pre-wrap;">{{ entry.answer }}</div>
 </div>

@@ -3,129 +3,716 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Technician AI</title>
+  <title>Technician AI — Field Knowledge Console</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif&family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <script src="https://unpkg.com/htmx.org@1.9.12"></script>
   <style>
-    :root { font-family: system-ui, -apple-system, sans-serif; }
-    body { max-width: 720px; margin: 2rem auto; padding: 0 1rem; color: #1a1a1a; }
-    h1 { font-size: 1.4rem; margin-bottom: 0.25rem; }
-    p.sub { color: #666; margin-top: 0; }
-    form { margin: 1rem 0; }
-    textarea { width: 100%; min-height: 80px; padding: 0.6rem; font: inherit; box-sizing: border-box; }
-    input[type=text] { width: 100%; padding: 0.5rem; font: inherit; box-sizing: border-box; }
-    button { padding: 0.55rem 1rem; font: inherit; cursor: pointer; background: #1a1a1a; color: #fff; border: 0; border-radius: 4px; }
-    button.secondary { background: #f0f0f0; color: #1a1a1a; }
-    .answer { padding: 1rem; background: #fafafa; border: 1px solid #eee; border-radius: 6px; margin-top: 1rem; }
-    .answer .text { white-space: pre-wrap; }
-    .sources { margin-top: 0.8rem; font-size: 0.85rem; color: #555; }
-    .sources li { margin-bottom: 0.3rem; }
-    .feedback { margin-top: 1rem; display: flex; gap: 0.5rem; flex-wrap: wrap; }
-    .learned-form { margin-top: 0.5rem; display: none; gap: 0.5rem; }
+    :root {
+      --paper:        #f7f4ec;
+      --paper-2:      #fbf9f3;
+      --ink:          #161412;
+      --ink-2:        #3d3a34;
+      --ink-3:        #6b6558;
+      --rule:         #1a1815;
+      --rule-soft:    #b6ad97;
+      --rule-hair:    #d8d0bb;
+      --highlight:    #f7e8a8;
+      --highlight-edge:#e6cf6a;
+      --crimson:      #9a2b1f;
+      --crimson-dark: #7a2218;
+      --moss:         #4f6b3e;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter Tight', -apple-system, system-ui, sans-serif;
+      font-size: 16px;
+      line-height: 1.6;
+      color: var(--ink);
+      background: var(--paper);
+      -webkit-font-smoothing: antialiased;
+    }
+    .mono { font-family: 'JetBrains Mono', monospace; font-feature-settings: 'tnum'; }
+    .serif { font-family: 'Instrument Serif', Georgia, serif; font-weight: 400; }
+
+    /* ── Sheet (the "page") ───────────────────────────────── */
+    .sheet {
+      max-width: 1320px;
+      margin: 0 auto;
+      background: var(--paper);
+      min-height: 100vh;
+      border-left: 1px solid var(--rule-hair);
+      border-right: 1px solid var(--rule-hair);
+    }
+
+    /* ── Letterhead ───────────────────────────────────────── */
+    .letterhead {
+      padding: 1.5rem 2rem 1rem;
+      border-bottom: 2px solid var(--rule);
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 2rem;
+      align-items: end;
+    }
+    .wordmark {
+      font-family: 'Instrument Serif', Georgia, serif;
+      font-size: 2rem;
+      line-height: 1;
+      letter-spacing: -0.01em;
+      color: var(--ink);
+    }
+    .wordmark em {
+      font-style: italic;
+      color: var(--crimson);
+      font-weight: 400;
+    }
+    .doc-meta {
+      display: flex;
+      gap: 2rem;
+      align-self: end;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+      letter-spacing: 0.04em;
+      color: var(--ink-2);
+      text-transform: uppercase;
+    }
+    .doc-meta dl { margin: 0; display: flex; flex-direction: column; gap: 0.15rem; }
+    .doc-meta dt { color: var(--ink-3); font-size: 0.7rem; }
+    .doc-meta dd { margin: 0; color: var(--ink); font-weight: 500; }
+    .doc-status { color: var(--moss); }
+
+    .subtitle {
+      padding: 0.85rem 2rem;
+      border-bottom: 1px solid var(--rule);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--ink-2);
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+
+    /* ── Body grid ────────────────────────────────────────── */
+    .body {
+      display: grid;
+      grid-template-columns: 1fr 320px;
+      min-height: calc(100vh - 140px);
+    }
+    @media (max-width: 920px) {
+      .body { grid-template-columns: 1fr; }
+      .aside { border-left: 0; border-top: 1px solid var(--rule); }
+    }
+
+    .main { padding: 2rem; min-width: 0; }
+    .aside {
+      padding: 0;
+      border-left: 1px solid var(--rule);
+      background: var(--paper-2);
+    }
+
+    /* ── Section ──────────────────────────────────────────── */
+    .section { margin-bottom: 2.5rem; }
+    .section-head {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 1rem;
+      align-items: baseline;
+      padding-bottom: 0.6rem;
+      border-bottom: 1px solid var(--rule);
+      margin-bottom: 1.1rem;
+    }
+    .section-num {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8rem;
+      color: var(--ink-3);
+      letter-spacing: 0.08em;
+    }
+    .section-title {
+      font-family: 'Instrument Serif', Georgia, serif;
+      font-size: 1.75rem;
+      letter-spacing: -0.01em;
+      color: var(--ink);
+    }
+    .section-aside {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+      color: var(--ink-3);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    /* ── Form: ask ─────────────────────────────────────────── */
+    .ask {
+      border: 1px solid var(--rule);
+      background: #fff;
+      padding: 1.25rem;
+    }
+    .ask textarea {
+      width: 100%;
+      min-height: 110px;
+      padding: 0.6rem 0.75rem;
+      font: inherit;
+      font-size: 1rem;
+      line-height: 1.5;
+      color: var(--ink);
+      background: var(--paper);
+      border: 1px solid var(--rule-soft);
+      resize: vertical;
+      transition: border-color 0.1s;
+    }
+    .ask textarea:focus,
+    .ask input:focus {
+      outline: none;
+      border-color: var(--ink);
+      background: #fff;
+    }
+    .ask-actions {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 0.75rem;
+      gap: 1rem;
+    }
+    .ask-hint {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      color: var(--ink-3);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    /* ── Buttons ──────────────────────────────────────────── */
+    .btn {
+      font: inherit;
+      font-size: 0.85rem;
+      font-weight: 500;
+      padding: 0.55rem 1.15rem;
+      border: 1px solid var(--rule);
+      background: var(--ink);
+      color: #fff;
+      cursor: pointer;
+      letter-spacing: 0.01em;
+      transition: background 0.1s;
+    }
+    .btn:hover { background: var(--crimson); border-color: var(--crimson); }
+    .btn-secondary { background: #fff; color: var(--ink); }
+    .btn-secondary:hover { background: var(--ink); color: #fff; }
+    .btn-ghost {
+      background: transparent;
+      color: var(--ink-2);
+      border-color: transparent;
+      padding: 0.4rem 0.7rem;
+    }
+    .btn-ghost:hover {
+      background: transparent;
+      color: var(--crimson);
+      border-color: transparent;
+    }
+
+    .spinner {
+      display: none;
+      align-items: center;
+      gap: 0.4rem;
+      color: var(--ink-3);
+      font-size: 0.75rem;
+      font-family: 'JetBrains Mono', monospace;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .htmx-request .spinner { display: inline-flex; }
+    .spinner-dot {
+      width: 6px; height: 6px; background: var(--ink-2);
+      border-radius: 50%; animation: blink 1s steps(2, end) infinite;
+    }
+    @keyframes blink { 50% { opacity: 0.3; } }
+
+    /* ── Answer ───────────────────────────────────────────── */
+    .answer {
+      border: 1px solid var(--rule);
+      background: #fff;
+      margin-top: 1.5rem;
+    }
+    .answer-banner {
+      padding: 0.5rem 1rem;
+      background: var(--ink);
+      color: #fff;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .answer-body { padding: 1.5rem; }
+    .answer-text {
+      font-size: 1rem;
+      line-height: 1.65;
+      color: var(--ink);
+      white-space: pre-wrap;
+    }
+    .answer-text strong { font-weight: 600; }
+    .answer-text h1, .answer-text h2, .answer-text h3 {
+      font-family: 'Instrument Serif', Georgia, serif;
+      font-weight: 400;
+      letter-spacing: -0.005em;
+      margin-top: 1.2rem;
+      margin-bottom: 0.4rem;
+    }
+    .answer-text h1 { font-size: 1.4rem; }
+    .answer-text h2 { font-size: 1.2rem; }
+    .answer-text h3 { font-size: 1.05rem; }
+
+    /* ── Sources (numbered, bibliographic) ─────────────────── */
+    .sources {
+      margin-top: 1.5rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--rule-soft);
+    }
+    .sources-head {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--ink-3);
+      margin-bottom: 0.6rem;
+    }
+    .src {
+      display: grid;
+      grid-template-columns: 2.2rem 1fr;
+      padding: 0.55rem 0;
+      border-bottom: 1px dotted var(--rule-soft);
+      font-size: 0.85rem;
+    }
+    .src:last-child { border-bottom: 0; }
+    .src-num {
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--ink-3);
+      font-size: 0.78rem;
+    }
+    .src-body { color: var(--ink-2); }
+    .src-label { color: var(--ink); font-weight: 500; }
+    .src-meta {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+      color: var(--ink-3);
+      letter-spacing: 0.04em;
+    }
+    .src-preview {
+      display: block;
+      color: var(--ink-3);
+      margin-top: 0.2rem;
+      font-style: italic;
+    }
+
+    /* ── Feedback ─────────────────────────────────────────── */
+    .feedback {
+      margin-top: 1.25rem;
+      padding-top: 1rem;
+      border-top: 1px dashed var(--rule-soft);
+      display: flex;
+      gap: 0.4rem;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .feedback-prompt {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+      color: var(--ink-3);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-right: 0.5rem;
+    }
+    .learned-form {
+      display: none;
+      gap: 0.4rem;
+      flex: 1 1 100%;
+      margin-top: 0.5rem;
+    }
     .learned-form.open { display: flex; }
-    .msg { padding: 0.6rem; border-radius: 4px; margin-top: 0.5rem; font-size: 0.9rem; }
-    .msg.ok { background: #e8f5e8; color: #155215; }
-    .msg.warn { background: #fff5e0; color: #6b4400; }
-    .entry { padding: 0.7rem; background: #f6f6f6; border-radius: 4px; margin-top: 0.4rem; font-size: 0.9rem; }
-    .topic { padding: 0.2rem 0; border-bottom: 1px solid #eee; }
-    .topic > summary { display: flex; justify-content: space-between; gap: 0.5rem; padding: 0.4rem 0.6rem; border-radius: 4px; font-size: 0.9rem; cursor: pointer; list-style: none; }
+    .learned-form input[type=text] {
+      flex: 1;
+      padding: 0.55rem 0.75rem;
+      font: inherit;
+      font-size: 0.9rem;
+      background: var(--paper);
+      border: 1px solid var(--rule-soft);
+      color: var(--ink);
+    }
+
+    /* ── Aside (sidebar) ──────────────────────────────────── */
+    .aside-section { padding: 1.4rem 1.5rem; border-bottom: 1px solid var(--rule); }
+    .aside-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 0.9rem;
+    }
+    .aside-num {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      color: var(--ink-3);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .aside-title {
+      font-family: 'Instrument Serif', Georgia, serif;
+      font-size: 1.25rem;
+      color: var(--ink);
+      margin-top: 0.1rem;
+    }
+    .aside-count {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      color: var(--ink-3);
+    }
+
+    /* ── Topic tree ──────────────────────────────────────── */
+    .topic { border-top: 1px solid var(--rule-hair); padding-top: 0.5rem; margin-top: 0.4rem; }
+    .topic:first-child { border-top: 0; padding-top: 0; margin-top: 0; }
+    .topic > summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 0.35rem 0;
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 0.5rem;
+      align-items: baseline;
+    }
     .topic > summary::-webkit-details-marker { display: none; }
-    .topic > summary::before { content: "▸"; display: inline-block; width: 1rem; color: #888; transition: transform 0.1s; }
-    .topic[open] > summary::before { transform: rotate(90deg); }
-    .topic > summary:hover { background: #f6f6f6; }
-    .topic-path { color: #1a1a1a; flex: 1; }
-    .topic-counts { color: #888; font-variant-numeric: tabular-nums; white-space: nowrap; }
-    .doc-list { margin-left: 1.6rem; padding: 0.3rem 0; }
-    .doc { padding: 0.3rem 0; border-left: 2px solid #eee; padding-left: 0.7rem; margin: 0.2rem 0; }
-    .doc > summary { font-size: 0.85rem; cursor: pointer; padding: 0.15rem 0; }
-    .doc-source { color: #888; font-size: 0.75rem; margin-left: 0.4rem; }
-    .doc-text { padding: 0.5rem 0.8rem; margin-top: 0.3rem; background: #fafafa; border-radius: 4px; font-size: 0.85rem; white-space: pre-wrap; color: #333; }
-    .doc-kind-knowledge { border-left-color: #2D9D78; }
-    .tag { display: inline-block; padding: 0.1rem 0.4rem; margin: 0 0.3rem; background: #ececec; border-radius: 3px; font-size: 0.75rem; color: #444; }
-    .pill { display: inline-block; padding: 0.05rem 0.35rem; background: #ececec; border-radius: 3px; font-size: 0.7rem; color: #555; vertical-align: middle; }
-    .pill-knowledge { background: #d8f0e2; color: #155215; }
-    details { margin-top: 1.5rem; }
-    .htmx-request .spinner { display: inline; }
-    .spinner { display: none; margin-left: 0.5rem; color: #888; }
+    .topic-marker {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.85rem;
+      color: var(--ink-3);
+      width: 0.8rem;
+    }
+    .topic[open] .topic-marker::before { content: "−"; }
+    .topic:not([open]) .topic-marker::before { content: "+"; }
+    .topic-name {
+      font-size: 0.95rem;
+      color: var(--ink);
+      font-weight: 500;
+    }
+    .topic-name .crumb { color: var(--ink-3); font-weight: 400; }
+    .topic-tally { font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; color: var(--ink-3); }
+    .topic-tally .field { color: var(--moss); font-weight: 600; }
+    .topic-tally .manual { color: var(--ink-2); }
+
+    .doc-list { padding: 0.4rem 0 0.6rem 1.4rem; }
+    .doc {
+      padding: 0.45rem 0;
+      border-left: 1px solid var(--rule-hair);
+      padding-left: 0.85rem;
+      margin-bottom: 0.2rem;
+    }
+    .doc.kind-knowledge { border-left-color: var(--moss); border-left-width: 2px; padding-left: 0.85rem; }
+    .doc > summary {
+      list-style: none;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+    .doc > summary::-webkit-details-marker { display: none; }
+    .doc-row {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      flex-wrap: wrap;
+    }
+    .doc-title {
+      font-size: 0.9rem;
+      color: var(--ink);
+      font-weight: 500;
+      line-height: 1.4;
+    }
+    .doc-source {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      color: var(--ink-3);
+      letter-spacing: 0.02em;
+    }
+    .doc-text {
+      margin: 0.5rem 0 0.2rem;
+      padding: 0.75rem 0.85rem;
+      background: #fff;
+      border: 1px solid var(--rule-hair);
+      font-size: 0.85rem;
+      line-height: 1.6;
+      color: var(--ink-2);
+      white-space: pre-wrap;
+      max-height: 320px;
+      overflow-y: auto;
+    }
+
+    /* ── Tags ─────────────────────────────────────────────── */
+    .tag {
+      display: inline-flex;
+      padding: 0.15rem 0.45rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+      font-weight: 500;
+      letter-spacing: 0.02em;
+      color: var(--ink-2);
+      background: transparent;
+      border: 1px solid var(--rule-soft);
+    }
+    .tag-spec            { color: #155e75; border-color: #a5d8e0; }
+    .tag-procedure       { color: #1e3a8a; border-color: #b4c6e6; }
+    .tag-warning         { color: #92400e; border-color: var(--highlight-edge); background: var(--highlight); }
+    .tag-troubleshooting { color: var(--crimson-dark); border-color: #d99c97; }
+    .tag-part_info       { color: #6b21a8; border-color: #c8a4d8; }
+    .tag-reference       { color: var(--ink-3); border-color: var(--rule-hair); }
+    .tag-unknown         { color: var(--ink-3); border-color: var(--rule-hair); }
+
+    .kind-pill {
+      display: inline-flex;
+      padding: 0.1rem 0.4rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+    .kind-pill.manual { color: var(--ink-3); background: transparent; border: 1px solid var(--rule-hair); }
+    .kind-pill.field  { color: var(--moss); background: transparent; border: 1px solid #b8c8a8; }
+
+    /* ── Empty state ──────────────────────────────────────── */
+    .empty {
+      padding: 1rem 0;
+      font-size: 0.8rem;
+      color: var(--ink-3);
+      font-style: italic;
+    }
+
+    /* ── Upload ───────────────────────────────────────────── */
+    .upload .file-input {
+      display: block;
+      width: 100%;
+      padding: 0.5rem;
+      font-size: 0.78rem;
+      color: var(--ink-2);
+      background: var(--paper);
+      border: 1px dashed var(--rule-soft);
+      cursor: pointer;
+      margin-bottom: 0.6rem;
+    }
+    .upload .file-input::file-selector-button {
+      margin-right: 0.6rem;
+      padding: 0.3rem 0.7rem;
+      font: inherit;
+      font-size: 0.72rem;
+      font-weight: 500;
+      background: var(--ink);
+      color: #fff;
+      border: 0;
+      cursor: pointer;
+    }
+
+    /* ── Knowledge entries (in main) ──────────────────────── */
+    .entry {
+      padding: 1rem 0;
+      border-bottom: 1px solid var(--rule-hair);
+    }
+    .entry:last-child { border-bottom: 0; }
+    .entry-q {
+      font-family: 'Instrument Serif', Georgia, serif;
+      font-size: 1.05rem;
+      color: var(--ink);
+      margin-bottom: 0.3rem;
+    }
+    .entry-a {
+      font-size: 0.9rem;
+      color: var(--ink-2);
+      white-space: pre-wrap;
+    }
+
+    /* ── Messages ─────────────────────────────────────────── */
+    .msg {
+      padding: 0.85rem 1rem;
+      margin-top: 0.6rem;
+      border: 1px solid;
+      font-size: 0.85rem;
+    }
+    .msg.ok { background: #f3f8ed; color: var(--moss); border-color: #c2d5af; }
+    .msg.warn { background: var(--highlight); color: #6b4400; border-color: var(--highlight-edge); }
+
+    /* ── Footer ───────────────────────────────────────────── */
+    .colophon {
+      padding: 1rem 2rem;
+      border-top: 2px solid var(--rule);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      color: var(--ink-3);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      display: flex;
+      justify-content: space-between;
+    }
   </style>
 </head>
 <body>
-  <h1>Technician AI</h1>
-  <p class="sub">Ask about a part, a procedure, or a problem you're hitting on the job.</p>
 
-  <form hx-post="/ask" hx-target="#answer" hx-swap="innerHTML">
-    <textarea name="question" placeholder="e.g. Torque spec for the M8 bolts on the upper bracket?" required></textarea>
-    <div style="margin-top: 0.5rem;">
-      <button type="submit">Ask</button>
-      <span class="spinner">thinking…</span>
+  <div class="sheet">
+
+    <header class="letterhead">
+      <div class="wordmark">Technician&nbsp;<em>AI</em></div>
+      <div></div>
+      <div class="doc-meta">
+        <dl>
+          <dt>Document</dt>
+          <dd>FK-CONSOLE</dd>
+        </dl>
+        <dl>
+          <dt>Revision</dt>
+          <dd>0.1 · ALPHA</dd>
+        </dl>
+        <dl>
+          <dt>Status</dt>
+          <dd class="doc-status">● Online</dd>
+        </dl>
+      </div>
+    </header>
+
+    <div class="subtitle">
+      <span>Field Knowledge Console — Reference &amp; Capture Layer for Working Technicians</span>
+      <span>{{ topics|length }} topics · {{ knowledge_entries|length }} field notes</span>
     </div>
-  </form>
 
-  <div id="answer"></div>
+    <div class="body">
 
-  <details {% if topics %}open{% endif %}>
-    <summary>Topics ({{ topics|length }})</summary>
-    {% if not topics %}
-      <p style="color:#888; font-size: 0.9rem;">Topics appear after you ingest a manual or capture a field note.</p>
-    {% endif %}
-    {% for t in topics %}
-      <details class="topic">
-        <summary>
-          <span class="topic-path">{{ t.path|join(' › ') }}</span>
-          <span class="topic-counts">
-            {% if t.manual_count %}{{ t.manual_count }} manual{% endif %}
-            {% if t.manual_count and t.knowledge_count %} · {% endif %}
-            {% if t.knowledge_count %}{{ t.knowledge_count }} field{% endif %}
-          </span>
-        </summary>
-        <div class="doc-list">
-          {% for d in t.documents %}
-            <details class="doc {% if d.kind == 'knowledge_entry' %}doc-kind-knowledge{% endif %}">
+      <main class="main">
+
+        <section class="section">
+          <div class="section-head">
+            <span class="section-num">§ 01</span>
+            <h2 class="section-title">Ask the floor</h2>
+            <span class="section-aside">manual + field knowledge</span>
+          </div>
+
+          <div class="ask">
+            <form hx-post="/ask" hx-target="#answer" hx-swap="innerHTML">
+              <textarea name="question" placeholder="What's the torque spec for the M8 bracket? — Why does the laminator throw weak-solder errors after lunch? — How do we trace defect to welding machine?" required></textarea>
+              <div class="ask-actions">
+                <span class="ask-hint">Plain English. Be specific. Cite a part if you know it.</span>
+                <div style="display:flex; gap:0.6rem; align-items:center;">
+                  <span class="spinner"><span class="spinner-dot"></span> Searching</span>
+                  <button type="submit" class="btn">Submit Query</button>
+                </div>
+              </div>
+            </form>
+          </div>
+
+          <div id="answer"></div>
+        </section>
+
+        {% if knowledge_entries %}
+        <section class="section">
+          <div class="section-head">
+            <span class="section-num">§ 02</span>
+            <h2 class="section-title">Captured field knowledge</h2>
+            <span class="section-aside">{{ knowledge_entries|length }} entries</span>
+          </div>
+          {% for entry in knowledge_entries %}
+            <div class="entry">
+              <div class="entry-q">{{ entry.metadata.get('question', '(untitled)') }}</div>
+              <div class="entry-a">{{ entry.text }}</div>
+            </div>
+          {% endfor %}
+        </section>
+        {% endif %}
+
+      </main>
+
+      <aside class="aside">
+
+        <div class="aside-section">
+          <div class="aside-head">
+            <div>
+              <div class="aside-num">§ A · Index</div>
+              <div class="aside-title">Knowledge tree</div>
+            </div>
+            <span class="aside-count">{{ topics|length }}</span>
+          </div>
+
+          {% if not topics %}
+            <div class="empty">No topics yet. Ingest a manual to populate the tree.</div>
+          {% endif %}
+
+          {% for t in topics %}
+            <details class="topic">
               <summary>
-                <span class="pill {% if d.kind == 'knowledge_entry' %}pill-knowledge{% endif %}">{{ 'FIELD' if d.kind == 'knowledge_entry' else 'MANUAL' }}</span>
-                <strong>{{ d.metadata.get('title', '(untitled)') }}</strong>
-                <span class="tag">{{ d.metadata.get('entry_type', '?') }}</span>
-                <span class="doc-source">
-                  {% if d.kind == 'manual_chunk' %}
-                    {{ d.metadata.get('manual_title', '?') }}{% if d.metadata.get('page') %} · p.{{ d.metadata.page }}{% elif d.metadata.get('slide') %} · slide {{ d.metadata.slide }}{% endif %}
-                  {% else %}
-                    captured {{ d.created_at }}
-                  {% endif %}
+                <span class="topic-marker"></span>
+                <span class="topic-name">
+                  {% for crumb in t.path %}{% if not loop.last %}<span class="crumb">{{ crumb }}/</span>{% else %}{{ crumb }}{% endif %}{% endfor %}
+                </span>
+                <span class="topic-tally">
+                  {% if t.manual_count %}<span class="manual">{{ '%02d' | format(t.manual_count) }}M</span>{% endif %}{% if t.manual_count and t.knowledge_count %} {% endif %}{% if t.knowledge_count %}<span class="field">{{ '%02d' | format(t.knowledge_count) }}F</span>{% endif %}
                 </span>
               </summary>
-              <div class="doc-text">{{ d.text }}</div>
+              <div class="doc-list">
+                {% for d in t.documents %}
+                  <details class="doc {% if d.kind == 'knowledge_entry' %}kind-knowledge{% endif %}">
+                    <summary>
+                      <div class="doc-row">
+                        <span class="kind-pill {% if d.kind == 'knowledge_entry' %}field{% else %}manual{% endif %}">{{ 'F' if d.kind == 'knowledge_entry' else 'M' }}</span>
+                        <span class="tag tag-{{ d.metadata.get('entry_type', 'unknown') }}">{{ d.metadata.get('entry_type', '?') }}</span>
+                      </div>
+                      <div class="doc-title">{{ d.metadata.get('title', '(untitled)') }}</div>
+                      <div class="doc-source">
+                        {% if d.kind == 'manual_chunk' %}
+                          {{ d.metadata.get('manual_title', '?') }}{% if d.metadata.get('page') %} · p.{{ d.metadata.page }}{% elif d.metadata.get('slide') %} · slide {{ d.metadata.slide }}{% endif %}
+                        {% else %}
+                          captured · {{ d.created_at }}
+                        {% endif %}
+                      </div>
+                    </summary>
+                    <div class="doc-text">{{ d.text }}</div>
+                  </details>
+                {% endfor %}
+              </div>
             </details>
           {% endfor %}
         </div>
-      </details>
-    {% endfor %}
-  </details>
 
-  <details>
-    <summary>Recent knowledge entries ({{ knowledge_entries|length }})</summary>
-    {% if not knowledge_entries %}
-      <p style="color:#888; font-size: 0.9rem;">None yet. They appear here after technicians submit corrections or "I learned…" notes.</p>
-    {% endif %}
-    {% for entry in knowledge_entries %}
-      <div class="entry">
-        <strong>{{ entry.metadata.get('question', '(no question)') }}</strong>
-        <div style="margin-top: 0.3rem; white-space: pre-wrap;">{{ entry.text }}</div>
-      </div>
-    {% endfor %}
-  </details>
+        <div class="aside-section upload">
+          <div class="aside-head">
+            <div>
+              <div class="aside-num">§ B · Ingest</div>
+              <div class="aside-title">Add a manual</div>
+            </div>
+            <span class="aside-count">.pdf .pptx</span>
+          </div>
+          <form hx-post="/ingest" hx-encoding="multipart/form-data" hx-target="#ingest-result" hx-swap="innerHTML">
+            <input class="file-input" type="file" name="file" accept=".pdf,.pptx,application/pdf" required>
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;">
+              <div id="ingest-result" style="font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: var(--ink-3);"></div>
+              <button type="submit" class="btn btn-secondary">Process</button>
+            </div>
+          </form>
+        </div>
 
-  <details>
-    <summary>Upload a manual (PDF)</summary>
-    <form hx-post="/ingest" hx-encoding="multipart/form-data" hx-target="#ingest-result" hx-swap="innerHTML">
-      <input type="file" name="file" accept="application/pdf" required>
-      <button type="submit" class="secondary">Ingest</button>
-    </form>
-    <div id="ingest-result" style="margin-top: 0.5rem; font-size: 0.9rem; color: #555;"></div>
-  </details>
+      </aside>
+
+    </div>
+
+    <div class="colophon">
+      <span>Technician AI · Open source · MIT</span>
+      <span>github.com/AXora009/Technician-AI</span>
+    </div>
+
+  </div>
 
   <script>
     document.body.addEventListener('click', (e) => {
-      const t = e.target;
-      if (t.dataset && t.dataset.toggleLearned) {
+      const t = e.target.closest('[data-toggle-learned]');
+      if (t) {
+        e.preventDefault();
         const form = document.getElementById(t.dataset.toggleLearned);
         if (form) form.classList.toggle('open');
       }
