@@ -1,0 +1,13 @@
+.env
+data/*.db
+data/*.db-journal
+manuals/*.pdf
+manuals/*.PDF
+manuals/*.pptx
+manuals/*.PPTX
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+.DS_Store

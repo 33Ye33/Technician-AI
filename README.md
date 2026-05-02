@@ -1,96 +1,105 @@
-# Technician-AI
+# Technician AI
 
-An intelligent AI-powered technical support assistant that helps diagnose errors, answer common IT questions, and guide users through troubleshooting steps.
+An open-source assistant for technicians doing construction and parts-assembly work. Answers questions from manufacturer manuals **and** captures the field-learned knowledge that never makes it into manuals — torque tricks, gotchas, "this part strips if you over-torque past 40Nm even though spec says 50."
 
----
+The thesis: pure RAG over PDFs already exists. The thing that's actually valuable is the **capture loop** — making it near-zero-friction for a technician in the field to push what they just learned back into the knowledge base for the next person.
 
-## Features
-
-- **Smart routing** — automatically detects whether your query is a problem report or a general question
-- **Diagnostic engine** — identifies common error types (BSOD, kernel panic, HTTP errors, memory issues, etc.) and suggests fixes
-- **Knowledge base** — answers common IT questions about WiFi, Bluetooth, printers, passwords, viruses, and more
-- **Extensible** — easily add your own knowledge entries or connect to an LLM (OpenAI, Anthropic, etc.)
-
----
-
-## Project Structure
+## Architecture (backbone)
 
 ```
-Technician-AI/
-├── main.py               # Entry point — run this to start the assistant
-├── requirements.txt      # Python dependencies
-├── README.md
-├── src/
-│   ├── assistant.py      # Core assistant logic and query routing
-│   ├── knowledge_base.py # Stores and retrieves technical answers
-│   └── diagnostics.py    # Diagnoses error reports
-├── config/
-│   └── settings.py       # App configuration
-├── tests/
-│   └── test_assistant.py # Unit tests
-└── data/                 # Reserved for future datasets or logs
+Manuals (PDF) ──▶ ingest.py ──▶ chunks ──┐
+                                         ├──▶ SQLite (sqlite-vec)
+Technician feedback ──▶ structured ──────┘     (one polymorphic table)
+                          knowledge entries
+
+Question ──▶ embed ──▶ vec search ──▶ Claude (with cited sources) ──▶ answer
+   ▲                                                                   │
+   │                                                                   ▼
+   └────── feedback ("Worked" / "Didn't work" / "I learned…") ─────────┘
+                              ▼
+                    new knowledge entry, embedded, retrievable next time
 ```
 
----
+Stack: FastAPI + SQLite (`sqlite-vec`) + Anthropic (Claude Opus 4.7) + Voyage embeddings + HTMX (no frontend build step).
 
-## Getting Started
+## Quickstart
 
-### 1. Clone the repository
-
-```bash
-git clone https://github.com/abbyxu009-glitch/Technician-AI.git
-cd Technician-AI
-```
-
-### 2. Install dependencies
+### 1. Install
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 3. Run the assistant
+### 2. Configure keys
 
 ```bash
-python main.py
+cp .env.example .env
+# edit .env and set ANTHROPIC_API_KEY at minimum.
 ```
 
-### 4. Run tests
+**`VOYAGE_API_KEY` is optional.**
+
+- **With it set** → semantic search over chunks. Scales to thousands of pages.
+- **Without it** → no embeddings; the system passes the most recent ~20 chunks to Claude verbatim every request. Fine for a quick demo with one or two short manuals; degrades past that.
+
+Get a free Voyage key at https://www.voyageai.com/ when you're ready to scale beyond a single manual.
+
+### 3. Ingest a manual
 
 ```bash
-pytest tests/
+python ingest.py path/to/manual.pdf
 ```
 
----
+You can pass multiple PDFs. They're chunked, embedded with `voyage-3-lite`, and stored in `data/tech.db`.
 
-## Example Usage
+### 4. Run
 
-```
-Welcome to Technician-AI
-Your intelligent technical support assistant
-Type 'exit' or 'quit' to stop.
-
-You: my computer keeps crashing with a blue screen error
-Technician-AI: Diagnosis: A blue screen (BSOD) usually indicates a hardware or driver issue...
-
-You: how do I fix my wifi?
-Technician-AI: To fix WiFi issues: restart your router, forget and reconnect to the network...
+```bash
+python app.py
 ```
 
----
+Open http://localhost:8000.
 
-## Extending the Knowledge Base
+## The capture loop
 
-Open `src/knowledge_base.py` and add entries to the `self.data` dictionary:
+After every answer the UI shows three buttons:
 
-```python
-self.data["your topic"] = "Your answer here."
+- **Worked** — confirmation logged.
+- **Didn't work** — paired with a short note, the correction is structured by Claude into a knowledge entry and embedded into the same vector store the manuals live in. The next technician asking a similar question retrieves it.
+- **I learned something** — same flow, used when the answer wasn't wrong but a tech wants to add context.
+
+This is the thing worth focusing on. Pure retrieval is well-trodden; the moat is making contribution invisible.
+
+## Files
+
+| File | Purpose |
+|---|---|
+| `app.py` | FastAPI app, four routes (`/ask`, `/feedback/{id}`, `/ingest`, `/knowledge`). |
+| `db.py` | SQLite schema, vector search, conversation log. |
+| `rag.py` | Embeddings, retrieval, Claude calls (answering + structuring). |
+| `ingest.py` | CLI to chunk + embed PDF manuals. |
+| `templates/` | HTMX-rendered UI (one page + two partials). |
+
+## Data model
+
+One polymorphic table for everything searchable:
+
+```
+documents(id, kind ∈ {manual_chunk, knowledge_entry}, text, metadata_json, created_at)
+doc_vecs(doc_id → embedding)   -- sqlite-vec virtual table
+conversations(id, question, answer, retrieved_doc_ids_json, created_at)
 ```
 
-## Connecting an LLM
+Parts/equipment/etc. live in `metadata_json` until the schema needs to grow.
 
-To power responses with an LLM (e.g., Claude or GPT-4), update `src/assistant.py` to call your preferred API in the `respond()` method. Uncomment the relevant lines in `requirements.txt` and `config/settings.py`.
+## Roadmap (deliberately not in v0)
 
----
+- Auth, multi-tenancy
+- Mobile-native app, voice/photo input
+- A formal parts/equipment ontology
+- Versioning and admin UI for knowledge curation
+
+These all matter eventually. They don't matter for proving the loop works.
 
 ## License
 

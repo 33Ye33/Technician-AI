@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Technician AI</title>
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+  <style>
+    :root { font-family: system-ui, -apple-system, sans-serif; }
+    body { max-width: 720px; margin: 2rem auto; padding: 0 1rem; color: #1a1a1a; }
+    h1 { font-size: 1.4rem; margin-bottom: 0.25rem; }
+    p.sub { color: #666; margin-top: 0; }
+    form { margin: 1rem 0; }
+    textarea { width: 100%; min-height: 80px; padding: 0.6rem; font: inherit; box-sizing: border-box; }
+    input[type=text] { width: 100%; padding: 0.5rem; font: inherit; box-sizing: border-box; }
+    button { padding: 0.55rem 1rem; font: inherit; cursor: pointer; background: #1a1a1a; color: #fff; border: 0; border-radius: 4px; }
+    button.secondary { background: #f0f0f0; color: #1a1a1a; }
+    .answer { padding: 1rem; background: #fafafa; border: 1px solid #eee; border-radius: 6px; margin-top: 1rem; }
+    .answer .text { white-space: pre-wrap; }
+    .sources { margin-top: 0.8rem; font-size: 0.85rem; color: #555; }
+    .sources li { margin-bottom: 0.3rem; }
+    .feedback { margin-top: 1rem; display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    .learned-form { margin-top: 0.5rem; display: none; gap: 0.5rem; }
+    .learned-form.open { display: flex; }
+    .msg { padding: 0.6rem; border-radius: 4px; margin-top: 0.5rem; font-size: 0.9rem; }
+    .msg.ok { background: #e8f5e8; color: #155215; }
+    .msg.warn { background: #fff5e0; color: #6b4400; }
+    .entry { padding: 0.7rem; background: #f6f6f6; border-radius: 4px; margin-top: 0.4rem; font-size: 0.9rem; }
+    details { margin-top: 1.5rem; }
+    .htmx-request .spinner { display: inline; }
+    .spinner { display: none; margin-left: 0.5rem; color: #888; }
+  </style>
+</head>
+<body>
+  <h1>Technician AI</h1>
+  <p class="sub">Ask about a part, a procedure, or a problem you're hitting on the job.</p>
+
+  <form hx-post="/ask" hx-target="#answer" hx-swap="innerHTML">
+    <textarea name="question" placeholder="e.g. Torque spec for the M8 bolts on the upper bracket?" required></textarea>
+    <div style="margin-top: 0.5rem;">
+      <button type="submit">Ask</button>
+      <span class="spinner">thinking…</span>
+    </div>
+  </form>
+
+  <div id="answer"></div>
+
+  <details>
+    <summary>Recent knowledge entries ({{ knowledge_entries|length }})</summary>
+    {% if not knowledge_entries %}
+      <p style="color:#888; font-size: 0.9rem;">None yet. They appear here after technicians submit corrections or "I learned…" notes.</p>
+    {% endif %}
+    {% for entry in knowledge_entries %}
+      <div class="entry">
+        <strong>{{ entry.metadata.get('question', '(no question)') }}</strong>
+        <div style="margin-top: 0.3rem; white-space: pre-wrap;">{{ entry.text }}</div>
+      </div>
+    {% endfor %}
+  </details>
+
+  <details>
+    <summary>Upload a manual (PDF)</summary>
+    <form hx-post="/ingest" hx-encoding="multipart/form-data" hx-target="#ingest-result" hx-swap="innerHTML">
+      <input type="file" name="file" accept="application/pdf" required>
+      <button type="submit" class="secondary">Ingest</button>
+    </form>
+    <div id="ingest-result" style="margin-top: 0.5rem; font-size: 0.9rem; color: #555;"></div>
+  </details>
+
+  <script>
+    document.body.addEventListener('click', (e) => {
+      const t = e.target;
+      if (t.dataset && t.dataset.toggleLearned) {
+        const form = document.getElementById(t.dataset.toggleLearned);
+        if (form) form.classList.toggle('open');
+      }
+    });
+  </script>
+</body>
+</html>

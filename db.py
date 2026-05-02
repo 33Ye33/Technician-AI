@@ -1,0 +1,216 @@
+import json
+import os
+import sqlite3
+import struct
+from pathlib import Path
+
+import numpy as np
+
+EMBED_DIM = 512
+DB_PATH = os.environ.get("TECHNICIAN_AI_DB", "./data/tech.db")
+
+
+def _pack(vec: list[float] | None) -> bytes | None:
+    if vec is None:
+        return None
+    return struct.pack(f"{len(vec)}f", *vec)
+
+
+def _unpack(blob: bytes) -> np.ndarray:
+    return np.frombuffer(blob, dtype=np.float32)
+
+
+def connect() -> sqlite3.Connection:
+    Path(DB_PATH).parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def init_db() -> None:
+    conn = connect()
+    try:
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS documents (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                kind TEXT NOT NULL,
+                text TEXT NOT NULL,
+                metadata_json TEXT NOT NULL DEFAULT '{}',
+                embedding BLOB,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS conversations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                question TEXT NOT NULL,
+                answer TEXT NOT NULL,
+                retrieved_doc_ids_json TEXT NOT NULL DEFAULT '[]',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            """
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def insert_document(
+    kind: str,
+    text: str,
+    embedding: list[float] | None,
+    metadata: dict | None = None,
+) -> int:
+    conn = connect()
+    try:
+        cur = conn.execute(
+            "INSERT INTO documents (kind, text, metadata_json, embedding) VALUES (?, ?, ?, ?)",
+            (kind, text, json.dumps(metadata or {}), _pack(embedding)),
+        )
+        conn.commit()
+        return cur.lastrowid
+    finally:
+        conn.close()
+
+
+def insert_documents_batch(
+    rows: list[tuple[str, str, list[float] | None, dict]],
+) -> list[int]:
+    if not rows:
+        return []
+    conn = connect()
+    try:
+        ids: list[int] = []
+        for kind, text, embedding, metadata in rows:
+            cur = conn.execute(
+                "INSERT INTO documents (kind, text, metadata_json, embedding) VALUES (?, ?, ?, ?)",
+                (kind, text, json.dumps(metadata or {}), _pack(embedding)),
+            )
+            ids.append(cur.lastrowid)
+        conn.commit()
+        return ids
+    finally:
+        conn.close()
+
+
+def search_similar(embedding: list[float], k: int = 6) -> list[dict]:
+    conn = connect()
+    try:
+        rows = conn.execute(
+            "SELECT id, kind, text, metadata_json, embedding FROM documents WHERE embedding IS NOT NULL"
+        ).fetchall()
+    finally:
+        conn.close()
+
+    if not rows:
+        return []
+
+    query = np.asarray(embedding, dtype=np.float32)
+    query_norm = np.linalg.norm(query)
+    if query_norm == 0:
+        return []
+    query = query / query_norm
+
+    scored = []
+    for r in rows:
+        vec = _unpack(r["embedding"])
+        norm = np.linalg.norm(vec)
+        if norm == 0:
+            continue
+        sim = float(np.dot(query, vec / norm))
+        scored.append((sim, r))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+
+    return [
+        {
+            "id": r["id"],
+            "kind": r["kind"],
+            "text": r["text"],
+            "metadata": json.loads(r["metadata_json"]),
+            "score": sim,
+        }
+        for sim, r in scored[:k]
+    ]
+
+
+def list_all_documents(limit: int = 20) -> list[dict]:
+    """Used in no-embeddings mode: return the most recent docs as 'all sources'."""
+    conn = connect()
+    try:
+        rows = conn.execute(
+            "SELECT id, kind, text, metadata_json FROM documents ORDER BY id DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return [
+            {
+                "id": r["id"],
+                "kind": r["kind"],
+                "text": r["text"],
+                "metadata": json.loads(r["metadata_json"]),
+                "score": None,
+            }
+            for r in rows
+        ]
+    finally:
+        conn.close()
+
+
+def insert_conversation(
+    question: str, answer: str, retrieved_doc_ids: list[int]
+) -> int:
+    conn = connect()
+    try:
+        cur = conn.execute(
+            "INSERT INTO conversations (question, answer, retrieved_doc_ids_json) VALUES (?, ?, ?)",
+            (question, answer, json.dumps(retrieved_doc_ids)),
+        )
+        conn.commit()
+        return cur.lastrowid
+    finally:
+        conn.close()
+
+
+def get_conversation(conversation_id: int) -> dict | None:
+    conn = connect()
+    try:
+        row = conn.execute(
+            "SELECT id, question, answer, retrieved_doc_ids_json FROM conversations WHERE id = ?",
+            (conversation_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return {
+            "id": row["id"],
+            "question": row["question"],
+            "answer": row["answer"],
+            "retrieved_doc_ids": json.loads(row["retrieved_doc_ids_json"]),
+        }
+    finally:
+        conn.close()
+
+
+def list_knowledge_entries(limit: int = 100) -> list[dict]:
+    conn = connect()
+    try:
+        rows = conn.execute(
+            """
+            SELECT id, text, metadata_json, created_at
+            FROM documents
+            WHERE kind = 'knowledge_entry'
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+        return [
+            {
+                "id": r["id"],
+                "text": r["text"],
+                "metadata": json.loads(r["metadata_json"]),
+                "created_at": r["created_at"],
+            }
+            for r in rows
+        ]
+    finally:
+        conn.close()

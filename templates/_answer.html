@@ -1,0 +1,55 @@
+<div class="answer">
+  <div class="text">{{ answer }}</div>
+
+  {% if sources %}
+  <div class="sources">
+    <strong>Sources</strong>
+    <ol>
+      {% for s in sources %}
+        <li>
+          {% if s.kind == 'manual_chunk' %}
+            MANUAL — {{ s.metadata.get('manual_title', 'unknown') }}{% if s.metadata.get('page') %}, p.{{ s.metadata.page }}{% endif %}
+          {% else %}
+            KNOWLEDGE — field note
+          {% endif %}
+          <em style="color:#888;">{{ s.preview }}{% if s.preview|length >= 200 %}…{% endif %}</em>
+        </li>
+      {% endfor %}
+    </ol>
+  </div>
+  {% endif %}
+
+  <div class="feedback" id="feedback-{{ conversation_id }}">
+    <button class="secondary"
+            hx-post="/feedback/{{ conversation_id }}"
+            hx-vals='{"kind": "worked"}'
+            hx-target="#feedback-{{ conversation_id }}"
+            hx-swap="outerHTML">
+      Worked
+    </button>
+    <button class="secondary" data-toggle-learned="failed-form-{{ conversation_id }}">
+      Didn't work
+    </button>
+    <button class="secondary" data-toggle-learned="learned-form-{{ conversation_id }}">
+      I learned something
+    </button>
+
+    <form class="learned-form" id="failed-form-{{ conversation_id }}"
+          hx-post="/feedback/{{ conversation_id }}"
+          hx-target="#feedback-{{ conversation_id }}"
+          hx-swap="outerHTML">
+      <input type="hidden" name="kind" value="failed">
+      <input type="text" name="note" placeholder="What actually happened? What's the right answer?" required>
+      <button type="submit">Save</button>
+    </form>
+
+    <form class="learned-form" id="learned-form-{{ conversation_id }}"
+          hx-post="/feedback/{{ conversation_id }}"
+          hx-target="#feedback-{{ conversation_id }}"
+          hx-swap="outerHTML">
+      <input type="hidden" name="kind" value="learned">
+      <input type="text" name="note" placeholder="Field tip, gotcha, missing context…" required>
+      <button type="submit">Save</button>
+    </form>
+  </div>
+</div>
