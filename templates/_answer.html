@@ -8,9 +8,12 @@
       {% for s in sources %}
         <li>
           {% if s.kind == 'manual_chunk' %}
-            MANUAL — {{ s.metadata.get('manual_title', 'unknown') }}{% if s.metadata.get('page') %}, p.{{ s.metadata.page }}{% endif %}
+            MANUAL — {{ s.metadata.get('manual_title', 'unknown') }}{% if s.metadata.get('page') %}, p.{{ s.metadata.page }}{% elif s.metadata.get('slide') %}, slide {{ s.metadata.slide }}{% endif %}
           {% else %}
             KNOWLEDGE — field note
+          {% endif %}
+          {% if s.metadata.get('topic_path') %}
+            <span class="tag">{{ s.metadata.topic_path|join(' › ') }}{% if s.metadata.get('entry_type') %} / {{ s.metadata.entry_type }}{% endif %}</span>
           {% endif %}
           <em style="color:#888;">{{ s.preview }}{% if s.preview|length >= 200 %}…{% endif %}</em>
         </li>

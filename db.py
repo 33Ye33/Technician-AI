@@ -190,6 +190,82 @@ def get_conversation(conversation_id: int) -> dict | None:
         conn.close()
 
 
+def list_topics(include_documents: bool = False) -> list[dict]:
+    """Distinct topic paths with per-kind counts. Powers the topic browser.
+
+    With include_documents=True, each topic carries its full document list so
+    the UI can render an expandable tree.
+    """
+    conn = connect()
+    try:
+        rows = conn.execute(
+            "SELECT id, kind, text, metadata_json, created_at FROM documents ORDER BY id"
+        ).fetchall()
+    finally:
+        conn.close()
+
+    buckets: dict[tuple, dict] = {}
+    for r in rows:
+        meta = json.loads(r["metadata_json"])
+        path = meta.get("topic_path")
+        if not path:
+            continue
+        key = tuple(path)
+        bucket = buckets.setdefault(
+            key,
+            {
+                "path": list(path),
+                "manual_count": 0,
+                "knowledge_count": 0,
+                "documents": [],
+            },
+        )
+        if r["kind"] == "manual_chunk":
+            bucket["manual_count"] += 1
+        elif r["kind"] == "knowledge_entry":
+            bucket["knowledge_count"] += 1
+
+        if include_documents:
+            bucket["documents"].append(
+                {
+                    "id": r["id"],
+                    "kind": r["kind"],
+                    "text": r["text"],
+                    "metadata": meta,
+                    "created_at": r["created_at"],
+                }
+            )
+
+    out = sorted(buckets.values(), key=lambda x: " > ".join(x["path"]))
+    if not include_documents:
+        for b in out:
+            del b["documents"]
+    return out
+
+
+def list_existing_topic_paths(limit: int = 2000) -> list[list[str]]:
+    """All distinct topic paths in the DB, for tagger consistency."""
+    conn = connect()
+    try:
+        rows = conn.execute(
+            "SELECT metadata_json FROM documents LIMIT ?", (limit,)
+        ).fetchall()
+    finally:
+        conn.close()
+    seen: set[tuple] = set()
+    out: list[list[str]] = []
+    for r in rows:
+        meta = json.loads(r["metadata_json"])
+        tp = meta.get("topic_path")
+        if not tp:
+            continue
+        key = tuple(tp)
+        if key not in seen:
+            seen.add(key)
+            out.append(tp)
+    return out
+
+
 def list_knowledge_entries(limit: int = 100) -> list[dict]:
     conn = connect()
     try:

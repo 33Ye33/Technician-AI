@@ -29,8 +29,11 @@ app = FastAPI(title="Technician AI", lifespan=lifespan)
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request):
     entries = db.list_knowledge_entries(limit=20)
+    topics = db.list_topics(include_documents=True)
     return templates.TemplateResponse(
-        request, "index.html", {"knowledge_entries": entries}
+        request,
+        "index.html",
+        {"knowledge_entries": entries, "topics": topics},
     )
 
 
@@ -89,6 +92,11 @@ async def ingest_endpoint(file: UploadFile = File(...)):
 @app.get("/knowledge")
 def knowledge():
     return {"entries": db.list_knowledge_entries(limit=200)}
+
+
+@app.get("/topics")
+def topics():
+    return {"topics": db.list_topics()}
 
 
 if __name__ == "__main__":

@@ -6,6 +6,7 @@ import anthropic
 import voyageai
 
 import db
+import tagger
 
 EMBED_MODEL = "voyage-3-lite"
 ANSWER_MODEL = os.environ.get("TECHNICIAN_AI_MODEL", "claude-opus-4-7")
@@ -95,10 +96,19 @@ def _format_sources(snippets: list[dict]) -> str:
             label = f"MANUAL — {meta.get('manual_title', 'unknown')}"
             if "page" in meta:
                 label += f", p.{meta['page']}"
+            elif "slide" in meta:
+                label += f", slide {meta['slide']}"
         else:
             label = "KNOWLEDGE — field note"
             if meta.get("validated"):
                 label += " (validated)"
+        topic = meta.get("topic_path")
+        entry_type = meta.get("entry_type")
+        if topic:
+            tag_bits = " > ".join(topic)
+            if entry_type:
+                tag_bits += f" / {entry_type}"
+            label += f"  [{tag_bits}]"
         lines.append(f"[#{i}] {label}\n{s['text']}")
     return "\n\n".join(lines)
 
@@ -201,10 +211,18 @@ def record_knowledge_from_feedback(
     embedding = (
         embed_texts([text], input_type="document")[0] if EMBEDDINGS_ENABLED else None
     )
+    tags = tagger.tag_content(
+        text,
+        source_label="(field knowledge)",
+        existing_topics=db.list_existing_topic_paths(),
+    )
     metadata = {
         "question": structured["question"],
         "source_conversation_id": conversation_id,
         "origin": kind,
+        "topic_path": tags["topic_path"],
+        "entry_type": tags["entry_type"],
+        "title": tags["title"],
     }
     doc_id = db.insert_document(
         kind="knowledge_entry",

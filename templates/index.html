@@ -26,6 +26,23 @@
     .msg.ok { background: #e8f5e8; color: #155215; }
     .msg.warn { background: #fff5e0; color: #6b4400; }
     .entry { padding: 0.7rem; background: #f6f6f6; border-radius: 4px; margin-top: 0.4rem; font-size: 0.9rem; }
+    .topic { padding: 0.2rem 0; border-bottom: 1px solid #eee; }
+    .topic > summary { display: flex; justify-content: space-between; gap: 0.5rem; padding: 0.4rem 0.6rem; border-radius: 4px; font-size: 0.9rem; cursor: pointer; list-style: none; }
+    .topic > summary::-webkit-details-marker { display: none; }
+    .topic > summary::before { content: "▸"; display: inline-block; width: 1rem; color: #888; transition: transform 0.1s; }
+    .topic[open] > summary::before { transform: rotate(90deg); }
+    .topic > summary:hover { background: #f6f6f6; }
+    .topic-path { color: #1a1a1a; flex: 1; }
+    .topic-counts { color: #888; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .doc-list { margin-left: 1.6rem; padding: 0.3rem 0; }
+    .doc { padding: 0.3rem 0; border-left: 2px solid #eee; padding-left: 0.7rem; margin: 0.2rem 0; }
+    .doc > summary { font-size: 0.85rem; cursor: pointer; padding: 0.15rem 0; }
+    .doc-source { color: #888; font-size: 0.75rem; margin-left: 0.4rem; }
+    .doc-text { padding: 0.5rem 0.8rem; margin-top: 0.3rem; background: #fafafa; border-radius: 4px; font-size: 0.85rem; white-space: pre-wrap; color: #333; }
+    .doc-kind-knowledge { border-left-color: #2D9D78; }
+    .tag { display: inline-block; padding: 0.1rem 0.4rem; margin: 0 0.3rem; background: #ececec; border-radius: 3px; font-size: 0.75rem; color: #444; }
+    .pill { display: inline-block; padding: 0.05rem 0.35rem; background: #ececec; border-radius: 3px; font-size: 0.7rem; color: #555; vertical-align: middle; }
+    .pill-knowledge { background: #d8f0e2; color: #155215; }
     details { margin-top: 1.5rem; }
     .htmx-request .spinner { display: inline; }
     .spinner { display: none; margin-left: 0.5rem; color: #888; }
@@ -44,6 +61,44 @@
   </form>
 
   <div id="answer"></div>
+
+  <details {% if topics %}open{% endif %}>
+    <summary>Topics ({{ topics|length }})</summary>
+    {% if not topics %}
+      <p style="color:#888; font-size: 0.9rem;">Topics appear after you ingest a manual or capture a field note.</p>
+    {% endif %}
+    {% for t in topics %}
+      <details class="topic">
+        <summary>
+          <span class="topic-path">{{ t.path|join(' › ') }}</span>
+          <span class="topic-counts">
+            {% if t.manual_count %}{{ t.manual_count }} manual{% endif %}
+            {% if t.manual_count and t.knowledge_count %} · {% endif %}
+            {% if t.knowledge_count %}{{ t.knowledge_count }} field{% endif %}
+          </span>
+        </summary>
+        <div class="doc-list">
+          {% for d in t.documents %}
+            <details class="doc {% if d.kind == 'knowledge_entry' %}doc-kind-knowledge{% endif %}">
+              <summary>
+                <span class="pill {% if d.kind == 'knowledge_entry' %}pill-knowledge{% endif %}">{{ 'FIELD' if d.kind == 'knowledge_entry' else 'MANUAL' }}</span>
+                <strong>{{ d.metadata.get('title', '(untitled)') }}</strong>
+                <span class="tag">{{ d.metadata.get('entry_type', '?') }}</span>
+                <span class="doc-source">
+                  {% if d.kind == 'manual_chunk' %}
+                    {{ d.metadata.get('manual_title', '?') }}{% if d.metadata.get('page') %} · p.{{ d.metadata.page }}{% elif d.metadata.get('slide') %} · slide {{ d.metadata.slide }}{% endif %}
+                  {% else %}
+                    captured {{ d.created_at }}
+                  {% endif %}
+                </span>
+              </summary>
+              <div class="doc-text">{{ d.text }}</div>
+            </details>
+          {% endfor %}
+        </div>
+      </details>
+    {% endfor %}
+  </details>
 
   <details>
     <summary>Recent knowledge entries ({{ knowledge_entries|length }})</summary>

@@ -1,11 +1,15 @@
 import sys
 from pathlib import Path
 
+from dotenv import load_dotenv
 from pptx import Presentation
 from pypdf import PdfReader
 
+load_dotenv()
+
 import db
 import rag
+import tagger
 
 SUPPORTED_EXTS = {".pdf", ".pptx"}
 
@@ -66,20 +70,40 @@ def ingest_file(path: Path) -> int:
     if not page_chunks:
         return 0
 
+    db.init_db()
+
+    # Tag first, sequentially, so the topic taxonomy converges within a manual.
+    print(f"  tagging {len(page_chunks)} chunks ...")
+    existing_topics = db.list_existing_topic_paths()
+    tags_per_chunk: list[dict] = []
+    for i, (_, chunk) in enumerate(page_chunks):
+        tags = tagger.tag_content(chunk, source_label=title, existing_topics=existing_topics)
+        tags_per_chunk.append(tags)
+        existing_topics.append(tags["topic_path"])
+        if (i + 1) % 5 == 0 or i + 1 == len(page_chunks):
+            print(f"    tagged {i + 1}/{len(page_chunks)}")
+
+    # Then embed (batched if Voyage is enabled).
     if rag.EMBEDDINGS_ENABLED:
+        embeddings: list[list[float] | None] = []
         BATCH = 64
         for i in range(0, len(page_chunks), BATCH):
-            batch = page_chunks[i : i + BATCH]
-            embeddings = rag.embed_texts([c for _, c in batch], input_type="document")
-            for (page_num, chunk), embedding in zip(batch, embeddings):
-                metadata = {"manual_title": title, page_label: page_num, "source_path": str(path)}
-                rows.append(("manual_chunk", chunk, embedding, metadata))
+            batch = [c for _, c in page_chunks[i : i + BATCH]]
+            embeddings.extend(rag.embed_texts(batch, input_type="document"))
     else:
-        for page_num, chunk in page_chunks:
-            metadata = {"manual_title": title, page_label: page_num, "source_path": str(path)}
-            rows.append(("manual_chunk", chunk, None, metadata))
+        embeddings = [None] * len(page_chunks)
 
-    db.init_db()
+    for (page_num, chunk), tags, embedding in zip(page_chunks, tags_per_chunk, embeddings):
+        metadata = {
+            "manual_title": title,
+            page_label: page_num,
+            "source_path": str(path),
+            "topic_path": tags["topic_path"],
+            "entry_type": tags["entry_type"],
+            "title": tags["title"],
+        }
+        rows.append(("manual_chunk", chunk, embedding, metadata))
+
     inserted = db.insert_documents_batch(rows)
     return len(inserted)
 
