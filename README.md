@@ -2,6 +2,23 @@
 
 # Technician AI
 
+## 🔧 Key Capabilities
+
+### Multi-step Diagnosis
+Instead of returning a single answer, the system guides users through a structured troubleshooting process:
+- Identify surface-level issues
+- Ask follow-up questions step by step
+- Narrow down root causes
+- Provide actionable repair guidance
+
+### Improved Retrieval
+- Combines semantic and keyword-based retrieval
+- Handles exact parameter lookup (e.g. air pressure) more reliably
+
+### Cost-efficient Design
+- Standard queries avoid LLM usage where possible
+- LLM is only used for reasoning-heavy Diagnose flows
+
 **The open-source knowledge layer for people who fix, build, and assemble things for a living.**
 
 Pulls answers from manufacturer manuals — and captures the field-learned tricks that never make it into them.
