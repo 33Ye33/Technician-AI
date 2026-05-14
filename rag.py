@@ -1,21 +1,21 @@
+from __future__ import annotations
+
 import json
 import os
 import re
 
-import anthropic
-import voyageai
-
 import db
+import embed_client
+import llm_client
 import tagger
 
-EMBED_MODEL = "voyage-3-lite"
 ANSWER_MODEL = os.environ.get("TECHNICIAN_AI_MODEL", "claude-opus-4-7")
 TOP_K = 6
 CHUNK_CHARS = 1800
 CHUNK_OVERLAP = 200
 NO_EMBED_MAX_DOCS = 20
 
-EMBEDDINGS_ENABLED = bool(os.environ.get("VOYAGE_API_KEY"))
+EMBEDDINGS_ENABLED = embed_client.EMBEDDINGS_ENABLED
 
 ANSWER_SYSTEM_PROMPT = """You are Technician AI, an assistant for technicians doing construction and parts-assembly work.
 
@@ -34,31 +34,12 @@ STRUCTURE_SYSTEM_PROMPT = """You convert a technician's correction or new findin
 
 Output a compact entry with two fields: a canonical question (what someone would search for) and a self-contained answer (the field-learned fact, with any context needed to apply it). Strip filler. Preserve numbers, part references, and conditions exactly as the technician stated them."""
 
-_voyage: voyageai.Client | None = None
-_anthropic: anthropic.Anthropic | None = None
-
-
-def _voyage_client() -> voyageai.Client:
-    global _voyage
-    if _voyage is None:
-        _voyage = voyageai.Client()
-    return _voyage
-
-
-def _anthropic_client() -> anthropic.Anthropic:
-    global _anthropic
-    if _anthropic is None:
-        _anthropic = anthropic.Anthropic()
-    return _anthropic
-
-
 def embed_texts(texts: list[str], input_type: str = "document") -> list[list[float]]:
     if not texts:
         return []
     if not EMBEDDINGS_ENABLED:
-        raise RuntimeError("embed_texts called but VOYAGE_API_KEY is not set")
-    result = _voyage_client().embed(texts, model=EMBED_MODEL, input_type=input_type)
-    return result.embeddings
+        raise RuntimeError("embed_texts called but no embedding provider is configured")
+    return embed_client.embed_texts(texts, input_type=input_type)
 
 
 def embed_query(text: str) -> list[float]:
@@ -128,20 +109,13 @@ def answer_question(question: str) -> dict:
     sources_block = _format_sources(snippets)
     user_message = f"Sources:\n\n{sources_block}\n\n---\n\nQuestion: {question}"
 
-    response = _anthropic_client().messages.create(
+    answer = llm_client.chat(
+        system=ANSWER_SYSTEM_PROMPT,
+        user_message=user_message,
         model=ANSWER_MODEL,
         max_tokens=2048,
-        system=[
-            {
-                "type": "text",
-                "text": ANSWER_SYSTEM_PROMPT,
-                "cache_control": {"type": "ephemeral"},
-            }
-        ],
-        messages=[{"role": "user", "content": user_message}],
+        cache_system=True,
     )
-
-    answer = next((b.text for b in response.content if b.type == "text"), "")
     doc_ids = [s["id"] for s in snippets]
     conv_id = db.insert_conversation(question, answer, doc_ids)
 
@@ -169,27 +143,21 @@ def structure_knowledge_entry(question: str, prior_answer: str, technician_note:
         "Return JSON with two fields: 'question' (canonical search-style question) and 'answer' (the field-learned fact, self-contained)."
     )
 
-    response = _anthropic_client().messages.create(
+    text = llm_client.chat(
+        system=STRUCTURE_SYSTEM_PROMPT,
+        user_message=user_message,
         model=ANSWER_MODEL,
         max_tokens=1024,
-        system=STRUCTURE_SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": user_message}],
-        output_config={
-            "format": {
-                "type": "json_schema",
-                "schema": {
-                    "type": "object",
-                    "properties": {
-                        "question": {"type": "string"},
-                        "answer": {"type": "string"},
-                    },
-                    "required": ["question", "answer"],
-                    "additionalProperties": False,
-                },
-            }
+        json_schema={
+            "type": "object",
+            "properties": {
+                "question": {"type": "string"},
+                "answer": {"type": "string"},
+            },
+            "required": ["question", "answer"],
+            "additionalProperties": False,
         },
     )
-    text = next((b.text for b in response.content if b.type == "text"), "")
     return json.loads(text)
 
 
