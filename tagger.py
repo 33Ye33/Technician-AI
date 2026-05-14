@@ -4,12 +4,13 @@ Option B: each chunk gets {topic_path, entry_type, title} attached to its
 metadata. Option C will reuse this same shape inside atomic entries — see
 entry_types.ATOMIC_ENTRY_FIELDS.
 """
+from __future__ import annotations
+
 import json
 import os
 
-import anthropic
-
 import entry_types
+import llm_client
 
 MODEL = os.environ.get("TECHNICIAN_AI_MODEL", "claude-opus-4-7")
 
@@ -33,16 +34,6 @@ SCHEMA = {
     "additionalProperties": False,
 }
 
-_client: anthropic.Anthropic | None = None
-
-
-def _anthropic() -> anthropic.Anthropic:
-    global _client
-    if _client is None:
-        _client = anthropic.Anthropic()
-    return _client
-
-
 def tag_content(
     text: str,
     source_label: str,
@@ -65,17 +56,14 @@ def tag_content(
 
     user_message = f"Source: {source_label}{existing_block}\n\nChunk:\n{text}"
 
-    response = _anthropic().messages.create(
+    raw = llm_client.chat(
+        system=SYSTEM_PROMPT.format(types=", ".join(entry_types.ENTRY_TYPES)),
+        user_message=user_message,
         model=MODEL,
         max_tokens=512,
-        system=SYSTEM_PROMPT.format(types=", ".join(entry_types.ENTRY_TYPES)),
-        messages=[{"role": "user", "content": user_message}],
-        output_config={
-            "format": {"type": "json_schema", "schema": SCHEMA},
-            "effort": "low",
-        },
+        json_schema=SCHEMA,
+        effort="low",
     )
-    raw = next((b.text for b in response.content if b.type == "text"), "")
     result = json.loads(raw)
     # Defensive: clamp pathological outputs to a sane shape.
     path = [str(p).strip() for p in result.get("topic_path", []) if str(p).strip()][:4]
