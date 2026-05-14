@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import logging
 import sys
 from pathlib import Path
+
+log = logging.getLogger(__name__)
 
 from dotenv import load_dotenv
 from pptx import Presentation
@@ -70,29 +73,34 @@ def ingest_file(path: Path) -> int:
             page_chunks.append((page_num, chunk))
 
     if not page_chunks:
+        log.info("[%s] no text extracted, skipping", title)
         return 0
 
     db.init_db()
 
-    # Tag first, sequentially, so the topic taxonomy converges within a manual.
-    print(f"  tagging {len(page_chunks)} chunks ...")
+    log.info("[%s] tagging %d chunks (batch_size=%d) ...", title, len(page_chunks), tagger.TAG_BATCH_SIZE)
     existing_topics = db.list_existing_topic_paths()
     tags_per_chunk: list[dict] = []
-    for i, (_, chunk) in enumerate(page_chunks):
-        tags = tagger.tag_content(chunk, source_label=title, existing_topics=existing_topics)
-        tags_per_chunk.append(tags)
-        existing_topics.append(tags["topic_path"])
-        if (i + 1) % 5 == 0 or i + 1 == len(page_chunks):
-            print(f"    tagged {i + 1}/{len(page_chunks)}")
+    batch_size = tagger.TAG_BATCH_SIZE
+    all_texts = [chunk for _, chunk in page_chunks]
+    for i in range(0, len(all_texts), batch_size):
+        batch = all_texts[i : i + batch_size]
+        batch_tags = tagger.tag_content_batch(batch, source_label=title, existing_topics=existing_topics)
+        tags_per_chunk.extend(batch_tags)
+        for t in batch_tags:
+            existing_topics.append(t["topic_path"])
+        log.info("[%s] tagged %d/%d", title, len(tags_per_chunk), len(page_chunks))
 
-    # Then embed (batched if Voyage is enabled).
     if rag.EMBEDDINGS_ENABLED:
+        log.info("[%s] embedding %d chunks ...", title, len(page_chunks))
         embeddings: list[list[float] | None] = []
         BATCH = 64
         for i in range(0, len(page_chunks), BATCH):
             batch = [c for _, c in page_chunks[i : i + BATCH]]
             embeddings.extend(rag.embed_texts(batch, input_type="document"))
+        log.info("[%s] embedding complete", title)
     else:
+        log.info("[%s] embeddings disabled, skipping", title)
         embeddings = [None] * len(page_chunks)
 
     for (page_num, chunk), tags, embedding in zip(page_chunks, tags_per_chunk, embeddings):
@@ -107,6 +115,7 @@ def ingest_file(path: Path) -> int:
         rows.append(("manual_chunk", chunk, embedding, metadata))
 
     inserted = db.insert_documents_batch(rows)
+    log.info("[%s] inserted %d chunks into db", title, len(inserted))
     return len(inserted)
 
 
