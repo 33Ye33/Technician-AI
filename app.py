@@ -1,3 +1,4 @@
+import logging
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -8,11 +9,19 @@ from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 
+load_dotenv()
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+    datefmt="%H:%M:%S",
+)
+log = logging.getLogger(__name__)
+
 import db
 import ingest
 import rag
-
-load_dotenv()
+import whatsapp
 
 templates = Jinja2Templates(directory="templates")
 
@@ -24,6 +33,12 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="Technician AI", lifespan=lifespan)
+
+if whatsapp.ENABLED:
+    app.include_router(whatsapp.router)
+    log.info("whatsapp webhook enabled at /whatsapp/webhook")
+else:
+    log.info("whatsapp disabled — set WHATSAPP_ACCESS_TOKEN to enable")
 
 
 @app.get("/", response_class=HTMLResponse)
