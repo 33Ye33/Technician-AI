@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 
@@ -8,6 +9,8 @@ import db
 import embed_client
 import llm_client
 import tagger
+
+log = logging.getLogger(__name__)
 
 ANSWER_MODEL = os.environ.get("TECHNICIAN_AI_MODEL", "claude-opus-4-7")
 TOP_K = 6
@@ -95,11 +98,13 @@ def _format_sources(snippets: list[dict]) -> str:
 
 
 def answer_question(question: str) -> dict:
+    log.info("question: %s", question[:120])
     if EMBEDDINGS_ENABLED:
         query_vec = embed_query(question)
         snippets = db.search_similar(query_vec, k=TOP_K)
     else:
         snippets = db.list_all_documents(limit=NO_EMBED_MAX_DOCS)
+    log.info("retrieved %d snippets", len(snippets))
 
     if not snippets:
         answer = "I don't have any manuals or field notes ingested yet. Run `python ingest.py <pdf>` to load a manual."
@@ -109,6 +114,7 @@ def answer_question(question: str) -> dict:
     sources_block = _format_sources(snippets)
     user_message = f"Sources:\n\n{sources_block}\n\n---\n\nQuestion: {question}"
 
+    log.info("calling LLM model=%s", ANSWER_MODEL)
     answer = llm_client.chat(
         system=ANSWER_SYSTEM_PROMPT,
         user_message=user_message,
@@ -116,6 +122,7 @@ def answer_question(question: str) -> dict:
         max_tokens=2048,
         cache_system=True,
     )
+    log.info("answer received (%d chars)", len(answer))
     doc_ids = [s["id"] for s in snippets]
     conv_id = db.insert_conversation(question, answer, doc_ids)
 
