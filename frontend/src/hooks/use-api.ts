@@ -1,5 +1,6 @@
 import type {
   AskResponse,
+  DiagnoseResponse,
   FeedbackResponse,
   IngestResponse,
   KnowledgeEntry,
@@ -41,4 +42,10 @@ export const api = {
   knowledge: () => get<{ entries: KnowledgeEntry[] }>("/api/knowledge"),
 
   topics: () => get<{ topics: Topic[] }>("/api/topics"),
+
+  diagnoseStart: (question: string) =>
+    post<DiagnoseResponse>("/api/diagnose", { question }),
+
+  diagnoseStep: (sessionId: string, answer: string) =>
+    post<DiagnoseResponse>("/api/diagnose/step", { session_id: sessionId, answer }),
 };

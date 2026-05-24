@@ -1,6 +1,5 @@
 import { TopicTree } from "@/components/knowledge/topic-tree";
 import { UploadForm } from "@/components/ingest/upload-form";
-import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { Topic } from "@/types/api";
 
@@ -11,19 +10,20 @@ interface SidebarProps {
 
 export function Sidebar({ topics, onUploadComplete }: SidebarProps) {
   return (
-    <aside className="w-full lg:w-80 shrink-0 space-y-6">
+    <aside className="w-full lg:w-[320px] shrink-0 space-y-5">
       <section>
-        <h2 className="text-xs font-mono uppercase tracking-widest text-muted-foreground mb-3">
-          A &mdash; Knowledge Index
+        <h2 className="text-[10px] font-mono uppercase tracking-[0.15em] text-muted-foreground mb-2">
+          Knowledge Tree
         </h2>
-        <ScrollArea className="h-[320px] border border-border rounded-lg p-3">
-          <TopicTree topics={topics} />
-        </ScrollArea>
+        <div className="border border-border rounded-sm">
+          <ScrollArea className="h-[360px] p-2">
+            <TopicTree topics={topics} />
+          </ScrollArea>
+        </div>
       </section>
-      <Separator />
       <section>
-        <h2 className="text-xs font-mono uppercase tracking-widest text-muted-foreground mb-3">
-          B &mdash; Ingest Manual
+        <h2 className="text-[10px] font-mono uppercase tracking-[0.15em] text-muted-foreground mb-2">
+          Add a Manual
         </h2>
         <UploadForm onComplete={onUploadComplete} />
       </section>
