@@ -29,7 +29,7 @@ Pulls answers from manufacturer manuals — and captures the field-learned trick
 [![Powered by Claude](https://img.shields.io/badge/powered%20by-Claude%20Opus%204.7-D4A373?style=flat-square)](https://www.anthropic.com/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![SQLite](https://img.shields.io/badge/SQLite-003B57?style=flat-square&logo=sqlite&logoColor=white)](https://www.sqlite.org/)
-[![HTMX](https://img.shields.io/badge/HTMX-3D72D7?style=flat-square&logo=htmx&logoColor=white)](https://htmx.org/)
+[![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=white)](https://react.dev/)
 [![Self-hosted](https://img.shields.io/badge/self--hosted-✓-2D9D78?style=flat-square)](#quickstart)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](#contributing)
 [![GitHub stars](https://img.shields.io/github/stars/AXora009/Technician-AI?style=social)](https://github.com/AXora009/Technician-AI)
@@ -109,13 +109,28 @@ pip install -r requirements.txt
 
 ```bash
 cp .env.example .env
-# Open .env and set ANTHROPIC_API_KEY
-# (VOYAGE_API_KEY is optional — see "Operating modes" below)
 ```
 
-Get a Claude API key at [console.anthropic.com](https://console.anthropic.com/settings/keys).
+Open `.env` and set your LLM and embedding provider. The app supports multiple providers:
 
-### 3. Ingest a manual
+| Provider | Env vars |
+|---|---|
+| **Anthropic** | `ANTHROPIC_API_KEY` |
+| **OpenAI-compatible** (OpenAI, xAI Grok, Ollama) | `OPENAI_API_KEY`, `LLM_BASE_URL` |
+| **Embeddings** (Voyage, Google, OpenAI) | `VOYAGE_API_KEY` / `GOOGLE_API_KEY` / `OPENAI_API_KEY` |
+
+See `.env.example` for full documentation of all options.
+
+### 3. Build the frontend
+
+```bash
+cd frontend
+bun install
+bun run build
+cd ..
+```
+
+### 4. Ingest a manual
 
 ```bash
 python ingest.py path/to/your-manual.pdf
@@ -125,7 +140,7 @@ python ingest.py "path/to/training-deck.pptx"
 
 Multiple files at once work too. Supported formats: `.pdf`, `.pptx`.
 
-### 4. Run
+### 5. Run
 
 ```bash
 python app.py
@@ -175,26 +190,25 @@ Manuals and field notes live in **one searchable surface**. The capture loop clo
 
 | Layer | Choice | Why |
 |---|---|---|
-| **LLM** | Claude Opus 4.7 (Anthropic) | Best-in-class reasoning, with citation-friendly outputs |
-| **Embeddings** | Voyage `voyage-3-lite` *(optional)* | Lightweight, accurate, generous free tier |
+| **LLM** | Multi-provider (Anthropic, OpenAI-compatible, xAI Grok, Ollama) | Pluggable — use whatever provider works for you |
+| **Embeddings** | Multi-provider (Voyage, Google, OpenAI) *(optional)* | Configurable via env vars |
 | **Vector store** | SQLite + numpy cosine | Zero infra. Swap for pgvector or a vector DB when you outgrow it |
 | **Backend** | FastAPI + Uvicorn | Async, typed, minimal |
-| **Frontend** | HTMX + Jinja templates | No build step. No framework lock-in. Server-rendered, works on any phone |
+| **Frontend** | React 19 + Vite + Tailwind CSS + shadcn/ui | Dark/light theming, modular components, builds to static SPA |
 | **Ingestion** | `pypdf` + `python-pptx` | Native PDF and PowerPoint extraction |
-
-Total scaffold: **~500 lines of Python**, four files, zero infrastructure to provision.
+| **Messaging** | WhatsApp Cloud API *(optional)* | Upload docs and ask questions from WhatsApp |
 
 ---
 
 ## Operating modes
 
-| | With `VOYAGE_API_KEY` | Without |
+| | With embeddings configured | Without |
 |---|---|---|
-| **Retrieval** | Semantic vector search | Pass last ~20 chunks to Claude |
+| **Retrieval** | Semantic vector search | Pass last ~20 chunks to the LLM |
 | **Scales to** | Thousands of pages | A few short manuals (demo / single-doc workflows) |
-| **API keys needed** | Anthropic + Voyage | Anthropic only |
+| **Providers** | Voyage, Google, or OpenAI embeddings | LLM provider only |
 
-Recommended path: try without Voyage first to validate the loop, add Voyage when you ingest your second manual.
+Recommended path: try without embeddings first to validate the loop, add an embedding provider when you ingest your second manual.
 
 ---
 
@@ -266,7 +280,7 @@ Open an issue first for anything bigger than a bug fix so we can align on direct
 
 ## Acknowledgments
 
-Built on the shoulders of giants — Anthropic Claude, Voyage AI, FastAPI, SQLite, HTMX, and the long lineage of people who figured out how to capture institutional knowledge before us.
+Built on the shoulders of giants — Anthropic Claude, FastAPI, SQLite, React, Tailwind CSS, shadcn/ui, and the long lineage of people who figured out how to capture institutional knowledge before us.
 
 ---
 

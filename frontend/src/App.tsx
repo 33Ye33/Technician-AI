@@ -3,14 +3,18 @@ import { Header } from "@/components/layout/header";
 import { Sidebar } from "@/components/layout/sidebar";
 import { AskForm } from "@/components/ask/ask-form";
 import { AnswerCard } from "@/components/ask/answer-card";
+import { DiagnoseCard } from "@/components/ask/diagnose-card";
 import { EntryList } from "@/components/knowledge/entry-list";
 import { Spinner } from "@/components/shared/spinner";
-import { Separator } from "@/components/ui/separator";
 import { api } from "@/hooks/use-api";
-import type { AskResponse, KnowledgeEntry, Topic } from "@/types/api";
+import type { AskResponse, DiagnoseResponse, KnowledgeEntry, Topic } from "@/types/api";
+
+type ResultView =
+  | { kind: "ask"; data: AskResponse }
+  | { kind: "diagnose"; data: DiagnoseResponse };
 
 export default function App() {
-  const [answer, setAnswer] = useState<AskResponse | null>(null);
+  const [result, setResult] = useState<ResultView | null>(null);
   const [loading, setLoading] = useState(false);
   const [entries, setEntries] = useState<KnowledgeEntry[]>([]);
   const [topics, setTopics] = useState<Topic[]>([]);
@@ -25,15 +29,38 @@ export default function App() {
 
   async function handleAsk(question: string) {
     setLoading(true);
-    setAnswer(null);
+    setResult(null);
     try {
-      const result = await api.ask(question);
-      setAnswer(result);
+      const data = await api.ask(question);
+      setResult({ kind: "ask", data });
     } catch (err) {
-      setAnswer({
-        answer: err instanceof Error ? err.message : "Something went wrong.",
-        sources: [],
-        conversation_id: 0,
+      setResult({
+        kind: "ask",
+        data: {
+          answer: err instanceof Error ? err.message : "Something went wrong.",
+          sources: [],
+          conversation_id: 0,
+        },
+      });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleDiagnose(question: string) {
+    setLoading(true);
+    setResult(null);
+    try {
+      const data = await api.diagnoseStart(question);
+      setResult({ kind: "diagnose", data });
+    } catch (err) {
+      setResult({
+        kind: "ask",
+        data: {
+          answer: err instanceof Error ? err.message : "Diagnose failed.",
+          sources: [],
+          conversation_id: 0,
+        },
       });
     } finally {
       setLoading(false);
@@ -42,38 +69,30 @@ export default function App() {
 
   return (
     <div className="min-h-screen flex flex-col">
-      <Header />
-      <div className="flex-1 max-w-[1320px] mx-auto w-full px-6 py-6">
-        <div className="flex items-center gap-3 mb-6">
-          <span className="text-xs font-mono text-muted-foreground">
-            {topics.length} topic{topics.length !== 1 && "s"}
-          </span>
-          <span className="text-xs text-muted-foreground">&middot;</span>
-          <span className="text-xs font-mono text-muted-foreground">
-            {entries.length} field note{entries.length !== 1 && "s"}
-          </span>
-        </div>
+      <Header topicCount={topics.length} entryCount={entries.length} />
 
+      <div className="flex-1 max-w-[1320px] mx-auto w-full px-6 py-5">
         <div className="flex flex-col lg:flex-row gap-8">
-          <main className="flex-1 min-w-0 space-y-6">
+          <main className="flex-1 min-w-0 space-y-5">
             <section>
-              <h2 className="text-xs font-mono uppercase tracking-widest text-muted-foreground mb-3">
-                &sect; 01 &mdash; Query
+              <h2 className="text-sm font-mono uppercase tracking-[0.15em] text-muted-foreground mb-3">
+                &sect; &nbsp;Query &amp; Diagnose
               </h2>
-              <AskForm onSubmit={handleAsk} loading={loading} />
+              <AskForm onSubmit={handleAsk} onDiagnose={handleDiagnose} loading={loading} />
             </section>
 
             {loading && <Spinner />}
-            {answer && !loading && <AnswerCard result={answer} />}
+            {result?.kind === "ask" && !loading && <AnswerCard result={result.data} />}
+            {result?.kind === "diagnose" && !loading && <DiagnoseCard initial={result.data} />}
 
-            <Separator />
-
-            <section>
-              <h2 className="text-xs font-mono uppercase tracking-widest text-muted-foreground mb-3">
-                &sect; 02 &mdash; Captured Knowledge
-              </h2>
-              <EntryList entries={entries} />
-            </section>
+            {entries.length > 0 && (
+              <section>
+                <h2 className="text-[10px] font-mono uppercase tracking-[0.15em] text-muted-foreground mb-2 mt-6">
+                  &sect; &nbsp;Captured Knowledge
+                </h2>
+                <EntryList entries={entries} />
+              </section>
+            )}
           </main>
 
           <Sidebar topics={topics} onUploadComplete={refresh} />

@@ -1,4 +1,5 @@
 import os
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
@@ -12,6 +13,8 @@ from fastapi.templating import Jinja2Templates
 import db
 import ingest
 import rag
+
+_diag_sessions: dict[str, dict] = {}
 
 load_dotenv()
 
@@ -152,6 +155,43 @@ def api_knowledge():
 @app.get("/api/topics")
 def api_topics():
     return {"topics": db.list_topics()}
+
+
+@app.post("/api/diagnose")
+def api_diagnose_start(question: str = Form(...)):
+    question = question.strip()
+    if not question:
+        raise HTTPException(status_code=400, detail="empty question")
+    session_id = str(uuid.uuid4())
+    result = rag.diagnose_step(question, history=[], questions_asked=0)
+    _diag_sessions[session_id] = {
+        "question": question,
+        "history": [{"role": "assistant", "content": result["message"]}],
+    }
+    return {**result, "session_id": session_id, "step": 1}
+
+
+@app.post("/api/diagnose/step")
+def api_diagnose_continue(
+    session_id: str = Form(...),
+    answer: str = Form(...),
+):
+    answer = answer.strip()
+    if not answer:
+        raise HTTPException(status_code=400, detail="empty answer")
+    session = _diag_sessions.get(session_id)
+    if session is None:
+        raise HTTPException(status_code=400, detail="session not found")
+    question = session["question"]
+    history = list(session["history"])
+    questions_asked = sum(1 for m in history if m["role"] == "assistant")
+    history.append({"role": "user", "content": answer})
+    result = rag.diagnose_step(question, history, questions_asked=questions_asked)
+    if not result["is_resolved"]:
+        history.append({"role": "assistant", "content": result["message"]})
+    session["history"] = history
+    step = sum(1 for m in session["history"] if m["role"] == "assistant")
+    return {**result, "session_id": session_id, "step": step}
 
 
 # --- SPA static serving ---

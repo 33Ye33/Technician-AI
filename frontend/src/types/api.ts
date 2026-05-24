@@ -21,8 +21,10 @@ export interface KnowledgeEntry {
 }
 
 export interface Topic {
-  path: string;
-  count: number;
+  path: string | string[];
+  count?: number;
+  manual_count?: number;
+  knowledge_count?: number;
   documents?: KnowledgeEntry[];
 }
 
@@ -36,4 +38,13 @@ export interface FeedbackResponse {
   question?: string;
   answer?: string;
   message?: string;
+}
+
+export interface DiagnoseResponse {
+  message: string;
+  is_resolved: boolean;
+  sources: Source[];
+  conversation_id: number | null;
+  session_id: string;
+  step: number;
 }
