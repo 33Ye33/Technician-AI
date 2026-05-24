@@ -86,9 +86,15 @@ async def ingest_endpoint(file: UploadFile = File(...)):
             status_code=400,
             detail=f"unsupported file type {ext} (supported: {', '.join(sorted(ingest.SUPPORTED_EXTS))})",
         )
+    data = await file.read()
+    if ext in (".xlsx", ".xls", ".csv") and len(data) > ingest.MAX_SPREADSHEET_BYTES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"file too large ({len(data) / 1024 / 1024:.1f} MB). Max for spreadsheets: 5 MB",
+        )
     dest = Path("manuals") / file.filename
     dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_bytes(await file.read())
+    dest.write_bytes(data)
     chunks = ingest.ingest_file(dest)
     return JSONResponse({"filename": file.filename, "chunks": chunks})
 
@@ -140,9 +146,15 @@ async def api_ingest(file: UploadFile = File(...)):
             status_code=400,
             detail=f"unsupported file type {ext}",
         )
+    data = await file.read()
+    if ext in (".xlsx", ".xls", ".csv") and len(data) > ingest.MAX_SPREADSHEET_BYTES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"file too large ({len(data) / 1024 / 1024:.1f} MB). Max: 5 MB",
+        )
     dest = Path("manuals") / file.filename
     dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_bytes(await file.read())
+    dest.write_bytes(data)
     chunks = ingest.ingest_file(dest)
     return {"filename": file.filename, "chunks": chunks}
 
