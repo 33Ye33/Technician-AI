@@ -33,6 +33,23 @@ Rules:
 4. Be concise. Lead with the answer. Add the why or the steps only if it materially helps.
 5. Never invent part numbers, torque specs, or measurements. If a precise value is needed and not in the sources, say so."""
 
+DIAGNOSE_SYSTEM_PROMPT = """You are Technician AI running a guided, multi-turn fault diagnosis.
+
+The first user message contains source snippets from service manuals and field knowledge, the problem description, and a progress note showing how many questions have already been asked.
+
+Turn-by-turn rules:
+1. FIRST turn only: Read the problem and sources. Identify the 2-3 most plausible root causes. Ask ONE targeted, observable yes/no or short-answer question the technician can answer by inspecting the machine right now. Do NOT list the causes yet. Do NOT give repair steps.
+2. FOLLOW-UP turns: Review every answer so far. Update your working hypothesis. Ask ONE new question that either confirms the leading cause or rules it out. Vary the type of check (visual, audible, measurement) to build a fuller picture.
+3. MINIMUM QUESTIONS: Do NOT resolve until the progress note confirms at least 3 questions have been answered. The only exception is an immediately safety-critical situation (imminent injury, fire, or electrical hazard) — if that applies, say so explicitly and resolve immediately.
+4. RESOLUTION: Only when you have gathered sufficient evidence, begin your response with exactly "RESOLVED:" on its own line, then provide all four sections:
+   - Root cause: [one clear sentence]
+   - Confidence: [High / Medium / Low] — [one sentence justification based on the evidence collected]
+   - Repair steps: [numbered list, specific and actionable]
+   - Sources: [cite inline as [#1], [#2] matching the numbered snippets]
+5. Cite sources inline as [#N] in diagnostic questions too — note which source supports your hypothesis.
+6. Never ask more than 6 questions total before resolving regardless of outcome.
+7. One question per turn. Be concise. No preamble or filler."""
+
 STRUCTURE_SYSTEM_PROMPT = """You convert a technician's correction or new finding into a clean knowledge-base entry.
 
 Output a compact entry with two fields: a canonical question (what someone would search for) and a self-contained answer (the field-learned fact, with any context needed to apply it). Strip filler. Preserve numbers, part references, and conditions exactly as the technician stated them."""
@@ -206,3 +223,59 @@ def record_knowledge_from_feedback(
         metadata=metadata,
     )
     return {"id": doc_id, **structured}
+
+
+def diagnose_step(question: str, history: list[dict], questions_asked: int = 0) -> dict:
+    if EMBEDDINGS_ENABLED:
+        query_vec = embed_query(question)
+        snippets = db.search_similar(query_vec, k=TOP_K)
+    else:
+        snippets = db.list_all_documents(limit=NO_EMBED_MAX_DOCS)
+
+    if not snippets:
+        return {"message": "No manuals or field notes found. Ingest a manual first.", "is_resolved": False, "sources": [], "conversation_id": None}
+
+    sources_block = _format_sources(snippets)
+    context_note = (
+        f"\n\n[Diagnostic progress: {questions_asked} question(s) asked so far. "
+        f"Minimum 3 must be answered before resolving unless safety-critical.]"
+    )
+    initial_content = (
+        f"Sources:\n\n{sources_block}\n\n---\n\n"
+        f"Problem reported: {question}{context_note}"
+    )
+    messages = [{"role": "user", "content": initial_content}] + history
+    packed = "\n\n".join(
+        f"[{m['role'].upper()}]: {m['content']}" for m in messages
+    )
+    raw = llm_client.chat(
+        system=DIAGNOSE_SYSTEM_PROMPT,
+        user_message=packed,
+        model=ANSWER_MODEL,
+        max_tokens=1024,
+        cache_system=True,
+    )
+
+    is_resolved = raw.startswith("RESOLVED:")
+    message = raw[len("RESOLVED:"):].strip() if is_resolved else raw.strip()
+
+    conv_id = None
+    if is_resolved:
+        doc_ids = [s["id"] for s in snippets]
+        conv_id = db.insert_conversation(question, message, doc_ids)
+
+    return {
+        "message": message,
+        "is_resolved": is_resolved,
+        "sources": [
+            {
+                "index": i + 1,
+                "id": s["id"],
+                "kind": s["kind"],
+                "metadata": s["metadata"],
+                "preview": s["text"][:200],
+            }
+            for i, s in enumerate(snippets)
+        ] if is_resolved else [],
+        "conversation_id": conv_id,
+    }
