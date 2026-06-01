@@ -18,7 +18,7 @@ Pulls answers from manufacturer manuals — and captures the field-learned trick
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](#contributing)
 [![GitHub stars](https://img.shields.io/github/stars/AXora009/Technician-AI?style=social)](https://github.com/AXora009/Technician-AI)
 
-[Quickstart](#quickstart) · [How it works](#how-it-works) · [Key Capabilities](#key-capabilities) · [Roadmap](#roadmap) · [Contributing](#contributing)
+[Quickstart](#quickstart) · [Agent Design](#agent-design) · [Key Capabilities](#key-capabilities) · [Roadmap](#roadmap) · [Contributing](#contributing)
 
 </div>
 
@@ -37,18 +37,26 @@ That knowledge walks out the door at 5pm, retires every year, and gets re-learne
 
 ## What Technician AI does
 
-Two things, stitched into one tight loop:
+Technician AI is an agent workflow for factory and field troubleshooting:
 
 | | |
 |---|---|
-| **`retrieve`** | Drop in manuals, drawings, and inspection sheets. Ask questions in plain English. Get answers with cited sources from the docs. |
-| **`capture`** | Every answer is followed by three taps — **Worked / Didn't work / I learned…** Any correction or field note is structured by the LLM into a searchable knowledge entry. The next person asking that question gets the manual answer **plus** the field note. |
+| **`retrieve`** | Search manuals, SOPs, drawings, inspection sheets, and prior field fixes. |
+| **`diagnose`** | Guide technicians through safe, evidence-controlled troubleshooting. |
+| **`capture`** | Record every question, answer, step tried, outcome, and new field discovery. |
+| **`learn`** | Turn resolved sessions and technician notes into reusable knowledge entries. |
+| **`escalate`** | Detect safety risk, troubleshooting loops, or long unresolved sessions and route to a supervisor or senior support. |
 
-Pure RAG over PDFs already exists everywhere. The capture loop is the moat.
+The goal is not just to answer from manuals. The goal is to make every troubleshooting session improve the knowledge base.
 
 ---
 
 ## Key Capabilities
+
+### Session Memory + Knowledge Capture
+- Records the full troubleshooting trail: user questions, AI suggestions, technician replies, steps attempted, final resolution, and unresolved findings
+- Converts field-discovered issues that are missing from manuals or SOPs into a separate searchable knowledge repository
+- Reuses prior resolved cases alongside official documentation on future questions
 
 ### Safety-First Diagnosis
 Before any troubleshooting begins, the system detects safety-critical incidents:
@@ -65,6 +73,16 @@ The Diagnose flow uses a finite-state machine with structured evidence quality t
 - Blocks `HIGH` confidence resolution when all evidence is uncertain or hedged
 - Separates *confirmed blocking condition* from *suspected cause* and *alternative possibilities*
 - Enforces minimum evidence requirements before resolution
+
+### Multilingual Interaction
+- Detects the user's input language automatically
+- Answers in the same language during Q&A and troubleshooting
+- Keeps stored knowledge language-aware so multilingual teams can search and reuse the same operational memory
+
+### Escalation Control
+- Tracks long or repetitive troubleshooting sessions
+- Flags unresolved loops and time thresholds, for example 30 minutes without progress
+- Prompts escalation to a supervisor, EHS, maintenance engineer, or higher-level technical support when the current workflow is no longer productive
 
 ### Multi-Format Ingestion
 - **PDF** — text extraction + optional vision AI for image-heavy pages (circuit diagrams, work instructions)
@@ -199,7 +217,154 @@ Open **http://localhost:8000**. To share with others on the same network, run wi
 
 ---
 
-## How it works
+## Agent Design
+
+### 1. Knowledge Base
+
+Technician AI uses two knowledge layers:
+
+| Layer | What it stores | Purpose |
+|---|---|---|
+| **Official docs** | Manuals, SOPs, work instructions, drawings, inspection sheets | Grounded answers with citations |
+| **Field knowledge** | Questions asked, AI answers, troubleshooting steps, outcomes, technician notes, new production findings | Living memory of what actually works on the line |
+
+Every troubleshooting session becomes a structured record:
+
+```
+problem → context → retrieved evidence → AI suggestions
+→ technician actions → result → resolution status
+→ new field note / validated fix / escalation
+```
+
+Resolved sessions can be promoted into durable knowledge entries. Unresolved sessions remain searchable so teams can review what was tried before repeating work.
+
+### 2. Agent Processing
+
+```mermaid
+flowchart LR
+    T[Technician<br/>question, symptom, photo, note] --> A
+
+    subgraph Agent["Technician AI Agent"]
+        A[Detect language<br/>+ classify intent] --> B{Safety-critical?}
+        B -- yes --> C[Safety Gate<br/>immediate actions<br/>lockout / PPE / EHS checklist]
+        C --> D{Safe to continue?}
+        D -- no --> E[Hold workflow<br/>escalate to supervisor / EHS]
+        D -- yes --> F[Retrieve evidence]
+        B -- no --> F
+
+        F --> G[Reason over evidence<br/>separate confirmed facts<br/>from suspected causes]
+        G --> H{Mode}
+        H -- Direct Q&A --> I[Cited answer<br/>same language as user]
+        H -- Troubleshooting --> J[Diagnosis FSM<br/>ask one useful next check]
+        J --> K[Record technician result<br/>worked / failed / observed]
+        K --> L{Resolved?}
+        L -- no --> M{Loop, timeout,<br/>or low confidence?}
+        M -- no --> J
+        M -- yes --> N[Escalation packet<br/>problem, timeline, evidence,<br/>steps tried, suspected causes]
+        L -- yes --> O[Resolution summary]
+    end
+
+    subgraph KB["Knowledge Base"]
+        P[(Official docs<br/>manuals, SOPs, drawings,<br/>inspection sheets)]
+        Q[(Field knowledge<br/>prior sessions, validated fixes,<br/>production discoveries)]
+        R[(Session log<br/>questions, answers,<br/>steps, outcomes)]
+    end
+
+    P --> F
+    Q --> F
+
+    I --> R
+    K --> R
+    O --> R
+    N --> R
+
+    I --> S[Feedback<br/>worked / did not work / learned]
+    O --> S
+    S --> U[LLM structures new knowledge<br/>symptom, cause, fix, evidence,<br/>language, tags]
+    U --> V{Validate / approve}
+    V --> Q
+
+    N --> W[Supervisor or senior support]
+    E --> W
+```
+
+```
+user input
+   │
+   ▼
+detect language + intent
+   │
+   ├─ safety-critical? ──▶ Safety Gate
+   │                         │
+   │                         ▼
+   │                  immediate actions
+   │                  prerequisite checklist
+   │
+   ▼
+retrieve evidence
+   │
+   ├─ official docs
+   └─ field knowledge
+   │
+   ▼
+answer or diagnose
+   │
+   ├─ cite sources
+   ├─ ask one useful next question
+   ├─ track evidence quality
+   └─ record the interaction
+```
+
+The agent separates what the manual says, what prior technicians learned, and what is only suspected. It should not claim high confidence when the evidence is weak.
+
+### 3. Answering Questions
+
+For direct questions, the agent returns:
+- The answer in the user's language
+- Source citations from manuals or prior validated field notes
+- Any conflict between official docs and field experience
+- A feedback path: **Worked / Didn't work / I learned something**
+
+For diagnosis, the agent runs a controlled loop:
+- Confirm safety first
+- Ask for symptoms and observations
+- Recommend one or two concrete checks at a time
+- Track each attempted step and result
+- Stop when resolved, blocked, unsafe, or ready to escalate
+
+### 4. Adding Knowledge Back
+
+When a technician provides feedback or a session ends, the system structures the new knowledge:
+
+```
+raw note/session transcript
+   ▼
+LLM extracts: symptom, equipment, suspected cause, confirmed fix,
+evidence quality, source session, language, tags
+   ▼
+human validation / confidence score
+   ▼
+searchable knowledge entry
+```
+
+The next technician asking a related question gets the manual answer plus the validated field fix.
+
+### 5. Escalation Design
+
+The agent should escalate instead of endlessly troubleshooting when:
+- Safety is unresolved or the issue involves EHS risk
+- The same checks are being repeated
+- The session exceeds a configured time threshold, such as 30 minutes
+- The user reports multiple failed attempts with no new evidence
+- The model's confidence remains low after required evidence is collected
+
+Escalation output should include a compact handoff packet:
+- Original problem
+- Timeline of questions and actions
+- Evidence collected
+- Steps already tried
+- Current suspected causes
+- Why escalation was triggered
 
 ```
   .pdf / .pptx / .docx / .xlsx
@@ -297,7 +462,14 @@ Technician AI bets that LLMs finally close that gap. Three taps and one sentence
 - **Diagnosis FSM** — evidence-quality controls, SAFETY_HOLD enforcement
 - Progressive Web App — installable on iOS and Android
 
-**Next**
+**Agent Workflow (next)**
+- Full session memory: every question, answer, troubleshooting step, outcome, and final resolution
+- Session-to-knowledge promotion for production discoveries missing from manuals or SOPs
+- Automatic language detection and same-language answers across Q&A and diagnosis
+- Escalation triggers for repeated loops, low-confidence diagnosis, safety risk, and long unresolved sessions
+- Supervisor handoff packet with timeline, evidence, attempted fixes, and suspected causes
+
+**Product UX (next)**
 - Voice input on the answer page (mobile-first capture)
 - Photo attachment on knowledge entries
 - "Conflict surfaced" UI when manual and field note disagree
