@@ -368,6 +368,36 @@ Escalation output should include a compact handoff packet:
 
 ---
 
+## Project Layout
+
+```text
+technician_ai/
+  api.py          FastAPI routes and SPA serving
+  ingestion.py    PDF/PPTX/DOCX/Excel ingestion
+  retrieval.py    RAG, diagnosis prompting, feedback capture
+  database.py     SQLite schema and queries
+  diagnosis.py    evidence-controlled diagnosis state machine
+  safety.py       deterministic safety gate
+  llm.py          LLM provider adapter
+  embeddings.py   embedding provider adapter
+  tagging.py      topic and entry-type classification
+
+scripts/          maintenance and inspection utilities
+frontend/         React + Vite + Tailwind PWA
+static/           built frontend served by FastAPI
+templates/        legacy server-rendered fallback UI
+tests/            baseline and evidence checks
+```
+
+Root `app.py` and `ingest.py` are intentionally thin wrappers so local commands stay simple:
+
+```bash
+python app.py
+python ingest.py path/to/manual.pdf
+```
+
+---
+
 ## Stack
 
 | Layer | Choice | Why |
@@ -379,7 +409,7 @@ Escalation output should include a compact handoff packet:
 | **Backend** | FastAPI + Uvicorn | Async, typed, minimal |
 | **Frontend** | React 19 + Vite + Tailwind CSS + shadcn/ui | Dark/light theming, PWA, installable on mobile |
 | **Ingestion** | pypdf + python-pptx + python-docx + openpyxl + PyMuPDF | PDF, PPTX, DOCX, Excel |
-| **Safety** | `safety_gate.py` + `diagnosis_fsm.py` | Deterministic pre-LLM hazard routing + evidence-quality FSM |
+| **Safety** | `technician_ai/safety.py` + `technician_ai/diagnosis.py` | Deterministic pre-LLM hazard routing + evidence-quality FSM |
 
 ---
 

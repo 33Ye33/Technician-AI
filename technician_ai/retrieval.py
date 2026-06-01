@@ -4,12 +4,12 @@ import json
 import os
 import re
 
-import db
-import diagnosis_fsm
-import embed_client
-import llm_client
-import safety_gate
-import tagger
+from . import database as db
+from . import diagnosis as diagnosis_fsm
+from . import embeddings as embed_client
+from . import llm as llm_client
+from . import safety as safety_gate
+from . import tagging as tagger
 
 ANSWER_MODEL = os.environ.get("TECHNICIAN_AI_MODEL", "claude-opus-4-7")
 TOP_K = 6

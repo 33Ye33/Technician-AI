@@ -3,7 +3,8 @@
 # Phase-0 baseline specification.
 # TEST_CASES enumerates every scenario; BASELINE_STATUS records the expected
 # pass/fail verdict and the rationale derived from static code analysis of
-# app.py, rag.py, ingest.py, and the system prompts in llm_client.py.
+# app.py, technician_ai/retrieval.py, ingest.py, and the system prompts in
+# technician_ai/llm.py.
 
 TEST_CASES = [
     {

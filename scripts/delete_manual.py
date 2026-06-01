@@ -1,5 +1,8 @@
 """Delete all chunks from a specific manual so it can be re-ingested."""
-import db, json, sys
+import json
+import sys
+
+from technician_ai import database as db
 
 title = sys.argv[1] if len(sys.argv) > 1 else None
 if not title:

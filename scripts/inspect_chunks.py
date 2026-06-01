@@ -1,4 +1,6 @@
-import db, json
+import json
+
+from technician_ai import database as db
 
 conn = db.connect()
 rows = conn.execute(

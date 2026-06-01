@@ -5,7 +5,7 @@ diagnosis_fsm.py -- Finite-state machine for the technician diagnostic session.
 import re
 from copy import deepcopy
 
-import safety_gate as _sg
+from . import safety as _sg
 
 # ---------------------------------------------------------------------------
 # State constants
