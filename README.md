@@ -241,78 +241,37 @@ Resolved sessions can be promoted into durable knowledge entries. Unresolved ses
 ### 2. Agent Processing
 
 ```mermaid
-flowchart LR
-    T[Technician<br/>question, symptom, photo, note] --> A
+flowchart TD
+    A[Technician input] --> B[Detect language + intent]
+    B --> C{Safety risk?}
+    C -- yes --> D[Safety gate]
+    D --> E{Safe to continue?}
+    E -- no --> X[Escalate / hold]
+    E -- yes --> F[Retrieve evidence]
+    C -- no --> F
 
-    subgraph Agent["Technician AI Agent"]
-        A[Detect language<br/>+ classify intent] --> B{Safety-critical?}
-        B -- yes --> C[Safety Gate<br/>immediate actions<br/>lockout / PPE / EHS checklist]
-        C --> D{Safe to continue?}
-        D -- no --> E[Hold workflow<br/>escalate to supervisor / EHS]
-        D -- yes --> F[Retrieve evidence]
-        B -- no --> F
+    F --> G[Official docs + field knowledge]
+    G --> H[Reason with citations]
+    H --> I{Mode}
 
-        F --> G[Reason over evidence<br/>separate confirmed facts<br/>from suspected causes]
-        G --> H{Mode}
-        H -- Direct Q&A --> I[Cited answer<br/>same language as user]
-        H -- Troubleshooting --> J[Diagnosis FSM<br/>ask one useful next check]
-        J --> K[Record technician result<br/>worked / failed / observed]
-        K --> L{Resolved?}
-        L -- no --> M{Loop, timeout,<br/>or low confidence?}
-        M -- no --> J
-        M -- yes --> N[Escalation packet<br/>problem, timeline, evidence,<br/>steps tried, suspected causes]
-        L -- yes --> O[Resolution summary]
-    end
+    I -- Q&A --> J[Same-language answer]
+    I -- Diagnose --> K[Next troubleshooting check]
+    K --> L[Record result]
+    L --> M{Resolved?}
+    M -- no --> N{Loop / timeout / low confidence?}
+    N -- no --> K
+    N -- yes --> X
+    M -- yes --> O[Resolution summary]
 
-    subgraph KB["Knowledge Base"]
-        P[(Official docs<br/>manuals, SOPs, drawings,<br/>inspection sheets)]
-        Q[(Field knowledge<br/>prior sessions, validated fixes,<br/>production discoveries)]
-        R[(Session log<br/>questions, answers,<br/>steps, outcomes)]
-    end
+    J --> P[Session log]
+    L --> P
+    O --> P
+    X --> P
 
-    P --> F
-    Q --> F
-
-    I --> R
-    K --> R
-    O --> R
-    N --> R
-
-    I --> S[Feedback<br/>worked / did not work / learned]
-    O --> S
-    S --> U[LLM structures new knowledge<br/>symptom, cause, fix, evidence,<br/>language, tags]
-    U --> V{Validate / approve}
-    V --> Q
-
-    N --> W[Supervisor or senior support]
-    E --> W
-```
-
-```
-user input
-   │
-   ▼
-detect language + intent
-   │
-   ├─ safety-critical? ──▶ Safety Gate
-   │                         │
-   │                         ▼
-   │                  immediate actions
-   │                  prerequisite checklist
-   │
-   ▼
-retrieve evidence
-   │
-   ├─ official docs
-   └─ field knowledge
-   │
-   ▼
-answer or diagnose
-   │
-   ├─ cite sources
-   ├─ ask one useful next question
-   ├─ track evidence quality
-   └─ record the interaction
+    P --> Q[Extract field learning]
+    Q --> R{Validate}
+    R --> S[Knowledge base]
+    S --> F
 ```
 
 The agent separates what the manual says, what prior technicians learned, and what is only suspected. It should not claim high confidence when the evidence is weak.
