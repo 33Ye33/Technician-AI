@@ -2,23 +2,6 @@
 
 # Technician AI
 
-## 🔧 Key Capabilities
-
-### Multi-step Diagnosis
-Instead of returning a single answer, the system guides users through a structured troubleshooting process:
-- Identify surface-level issues
-- Ask follow-up questions step by step
-- Narrow down root causes
-- Provide actionable repair guidance
-
-### Improved Retrieval
-- Combines semantic and keyword-based retrieval
-- Handles exact parameter lookup (e.g. air pressure) more reliably
-
-### Cost-efficient Design
-- Standard queries avoid LLM usage where possible
-- LLM is only used for reasoning-heavy Diagnose flows
-
 **The open-source knowledge layer for people who fix, build, and assemble things for a living.**
 
 Pulls answers from manufacturer manuals — and captures the field-learned tricks that never make it into them.
@@ -26,15 +9,16 @@ Pulls answers from manufacturer manuals — and captures the field-learned trick
 [![License: MIT](https://img.shields.io/badge/License-MIT-1a1a1a?style=flat-square)](https://opensource.org/licenses/MIT)
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
 [![Status](https://img.shields.io/badge/status-alpha-FF9F1C?style=flat-square)](#roadmap)
-[![Powered by Claude](https://img.shields.io/badge/powered%20by-Claude%20Opus%204.7-D4A373?style=flat-square)](https://www.anthropic.com/)
+[![LLM](https://img.shields.io/badge/LLM-Gemini%20%7C%20Claude%20%7C%20OpenAI-7C3AED?style=flat-square)](https://ai.google.dev/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![SQLite](https://img.shields.io/badge/SQLite-003B57?style=flat-square&logo=sqlite&logoColor=white)](https://www.sqlite.org/)
 [![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=white)](https://react.dev/)
+[![PWA](https://img.shields.io/badge/PWA-installable-5A0FC8?style=flat-square)](https://web.dev/progressive-web-apps/)
 [![Self-hosted](https://img.shields.io/badge/self--hosted-✓-2D9D78?style=flat-square)](#quickstart)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](#contributing)
 [![GitHub stars](https://img.shields.io/github/stars/AXora009/Technician-AI?style=social)](https://github.com/AXora009/Technician-AI)
 
-[Quickstart](#quickstart) · [How it works](#how-it-works) · [Demo](#demo) · [Roadmap](#roadmap) · [Contributing](#contributing)
+[Quickstart](#quickstart) · [How it works](#how-it-works) · [Key Capabilities](#key-capabilities) · [Roadmap](#roadmap) · [Contributing](#contributing)
 
 </div>
 
@@ -57,43 +41,90 @@ Two things, stitched into one tight loop:
 
 | | |
 |---|---|
-| **`retrieve`** | Drop in PDFs and slide decks. Ask questions in plain English. Get answers with cited sources from the docs. |
-| **`capture`** | Every answer is followed by three taps — **Worked / Didn't work / I learned…** Any correction or field note is structured by Claude into a searchable knowledge entry. The next person asking that question gets the manual answer **plus** the field note. |
+| **`retrieve`** | Drop in manuals, drawings, and inspection sheets. Ask questions in plain English. Get answers with cited sources from the docs. |
+| **`capture`** | Every answer is followed by three taps — **Worked / Didn't work / I learned…** Any correction or field note is structured by the LLM into a searchable knowledge entry. The next person asking that question gets the manual answer **plus** the field note. |
 
 Pure RAG over PDFs already exists everywhere. The capture loop is the moat.
 
 ---
 
+## Key Capabilities
+
+### Safety-First Diagnosis
+Before any troubleshooting begins, the system detects safety-critical incidents:
+- **Broken glass** near moving equipment
+- **Unexpected pneumatic movement** / pinch risk
+- **Electrical hazards** — sparks, live wires, burning smell
+- **Personnel inside the machine**, fire, chemical release
+
+For each hazard type, a deterministic **Safety Gate** issues source-grounded immediate actions and a prerequisite checklist. Normal diagnosis only begins after all safety confirmations are received.
+
+### Evidence-Controlled Diagnosis
+The Diagnose flow uses a finite-state machine with structured evidence quality tracking:
+- Classifies each technician answer as `CONFIRMED`, `APPROXIMATE`, `SUSPECTED`, `HEARSAY`, or `NEGATIVE`
+- Blocks `HIGH` confidence resolution when all evidence is uncertain or hedged
+- Separates *confirmed blocking condition* from *suspected cause* and *alternative possibilities*
+- Enforces minimum evidence requirements before resolution
+
+### Multi-Format Ingestion
+- **PDF** — text extraction + optional vision AI for image-heavy pages (circuit diagrams, work instructions)
+- **PPTX** — slide-by-slide extraction with speaker notes
+- **DOCX** — section-aware extraction preserving table structure
+- **XLSX / XLS** — each sheet converted to searchable Markdown tables
+
+### Improved Retrieval
+- Semantic vector search when embeddings are configured (Voyage, Google, OpenAI)
+- Keyword-based fallback when no embedding provider is set — works out of the box
+- Vision ingestion for graphical PDF pages that text extraction misses
+
+### Mobile PWA
+Installable on iOS and Android as a Progressive Web App — works like a native app, no app store required.
+
+---
+
 ## Demo
 
-Drop a `.pptx` or `.pdf` into the system, ask a question, get a cited answer:
+Drop a manual into the system, ask a question, get a cited answer:
 
 ```
-> What causes micro-cracks in module rework?
+> What is the required air supply pressure for this machine?
 
-Micro-cracks are tied to four equipment areas [#7]:
-
-  1. Tape machine        — incorrect tension or alignment
-  2. Lamination nozzle   — uneven pressure across the panel
-  3. Layout nozzle       — drop-height misconfiguration
-  4. Barcode position    — interference with the cell during inspection
-  5. Adhesive film       — length tolerance out of spec
+The air supply pressure must be maintained at 0.5–0.7 MPa [#3].
 
 Sources
-  [#7] MANUAL — Module Rework Training PPT-EN, slide 7
-  [#8] MANUAL — Module Rework Training PPT-EN, slide 8
-  ...
+  [#3] MANUAL — Maintenance Manual, section 2.2.23
 
 [ Worked ]  [ Didn't work ]  [ I learned something ]
 ```
 
-Tap **I learned something** with a quick note ("the layout nozzle drift only shows up after 4hrs of run-time, recalibrate at shift change") and that note becomes a structured knowledge entry retrievable on the next ask.
+For a safety incident:
+
+```
+> A sheet of glass broke inside the machine near the robot arm.
+
+## Safety Alert: Broken Glass
+
+Broken glass inside an operating machine presents a serious laceration hazard.
+Do not reach into the machine or approach moving mechanisms.
+
+### Documented Immediate Actions
+1. Keep machine doors closed and locked until it is confirmed safe to open them.
+   Source: Glass Loading Manual — Hazard section
+2. Wear proper PPE before any cleanup of broken glass.
+   Source: Glass Loading Manual — Hazard section
+3. Press Emergency Stop if there is any immediate risk to personnel, and report
+   to supervisor and EHS immediately.
+   Source: Glass Loading Manual — Hazard section
+
+> For additional steps: Follow your site-approved procedure or contact your
+> supervisor/EHS before proceeding further.
+
+Before I continue: Is everyone clear of the machine, and is anyone injured?
+```
 
 ---
 
 ## Quickstart
-
-Get from zero to a running instance in under five minutes.
 
 ### 1. Clone and install
 
@@ -101,7 +132,7 @@ Get from zero to a running instance in under five minutes.
 git clone https://github.com/AXora009/Technician-AI.git
 cd Technician-AI
 
-python3 -m venv .venv && source .venv/bin/activate
+python3 -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
@@ -111,22 +142,32 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-Open `.env` and set your LLM and embedding provider. The app supports multiple providers:
+Open `.env` and set your LLM provider. Three options:
 
-| Provider | Env vars |
+| Provider | Key to set | Model example |
+|---|---|---|
+| **Google Gemini** (free tier available) | `GOOGLE_API_KEY` | `gemini-2.5-flash` |
+| **Anthropic Claude** | `ANTHROPIC_API_KEY` | `claude-sonnet-4-6` |
+| **OpenAI-compatible** | `OPENAI_API_KEY` | `gpt-4o` |
+
+Set `LLM_PROVIDER=google` (or `anthropic` / `openai`) to pick explicitly. Otherwise auto-detected from whichever key is present.
+
+For embeddings (optional — improves retrieval quality significantly):
+
+| Provider | Key to set |
 |---|---|
-| **Anthropic** | `ANTHROPIC_API_KEY` |
-| **OpenAI-compatible** (OpenAI, xAI Grok, Ollama) | `OPENAI_API_KEY`, `LLM_BASE_URL` |
-| **Embeddings** (Voyage, Google, OpenAI) | `VOYAGE_API_KEY` / `GOOGLE_API_KEY` / `OPENAI_API_KEY` |
+| **Voyage AI** | `VOYAGE_API_KEY` |
+| **Google** | `GOOGLE_API_KEY` |
+| **OpenAI** | `OPENAI_API_KEY` |
 
-See `.env.example` for full documentation of all options.
+See `.env.example` for all options.
 
 ### 3. Build the frontend
 
 ```bash
 cd frontend
-bun install
-bun run build
+npm install
+npm run build
 cd ..
 ```
 
@@ -134,11 +175,19 @@ cd ..
 
 ```bash
 python ingest.py path/to/your-manual.pdf
-# or
-python ingest.py "path/to/training-deck.pptx"
+python ingest.py "path/to/inspection-checklist.xlsx"
+python ingest.py "path/to/work-instruction.docx"
 ```
 
-Multiple files at once work too. Supported formats: `.pdf`, `.pptx`.
+Supported formats: `.pdf`, `.pptx`, `.docx`, `.xlsx`, `.xls`
+
+For PDFs with circuit diagrams or image-heavy pages, enable vision extraction:
+```bash
+# In .env:
+USE_VISION_INGEST=true
+VISION_ALL_PAGES=true
+VISION_PAGE_RANGE=1-30
+```
 
 ### 5. Run
 
@@ -146,43 +195,52 @@ Multiple files at once work too. Supported formats: `.pdf`, `.pptx`.
 python app.py
 ```
 
-Open **http://localhost:8000**.
+Open **http://localhost:8000**. To share with others on the same network, run with `--host 0.0.0.0`.
 
 ---
 
 ## How it works
 
 ```
-                    ┌──────────────────────────────────────────┐
-   .pdf / .pptx ──▶ │  ingest.py     chunk + embed + store     │
-                    └─────────────────────┬────────────────────┘
-                                          ▼
-                            ┌───────────────────────────┐
-                            │  SQLite (one polymorphic  │
-                            │  table: manual_chunk +    │
-                            │  knowledge_entry)         │
-                            └────────────┬──────────────┘
-                                         │
-   "What's the torque spec?"             │
-            │                            ▼
-            ▼                  ┌─────────────────────┐
-        embed query  ────────▶ │  cosine similarity  │
-                               │  (numpy or vec DB)  │
-                               └──────────┬──────────┘
-                                          ▼ top-K snippets
-                                   ┌─────────────┐
-                                   │   Claude    │ ── cited answer
-                                   └──────┬──────┘
-                                          ▼
-                          [ Worked ] [ Didn't ] [ I learned… ]
-                                          │
-                                          ▼
-                          Claude structures the note into
-                          { question, answer } → embed → insert
-                          → retrievable on the next question
+  .pdf / .pptx / .docx / .xlsx
+          │
+          ▼
+  ┌─────────────────────────────────────┐
+  │  ingest.py                          │
+  │  text extract → vision fallback     │
+  │  chunk → embed (optional) → store   │
+  └──────────────────┬──────────────────┘
+                     ▼
+         ┌───────────────────────┐
+         │  SQLite               │
+         │  manual_chunk +       │
+         │  knowledge_entry      │
+         └──────────┬────────────┘
+                    │
+  "What's the torque spec?"
+           │        ▼
+           ▼   vector search (or keyword fallback)
+      embed query ────────▶ top-K snippets
+                                  │
+                     ┌────────────▼────────────────┐
+                     │  Safety Gate                 │
+                     │  (hazard detected → alert)   │
+                     │                              │
+                     │  Diagnosis FSM               │
+                     │  SAFETY_HOLD → SYMPTOM       │
+                     │  GATHERING → CAUSE NARROWING │
+                     │  → RESOLVED                  │
+                     └────────────┬────────────────┘
+                                  ▼
+                             cited answer
+                                  │
+                                  ▼
+                    [ Worked ] [ Didn't ] [ I learned… ]
+                                  │
+                                  ▼
+                    LLM structures note → embed → insert
+                    → retrievable on next question
 ```
-
-Manuals and field notes live in **one searchable surface**. The capture loop closes silently in the background.
 
 ---
 
@@ -190,25 +248,26 @@ Manuals and field notes live in **one searchable surface**. The capture loop clo
 
 | Layer | Choice | Why |
 |---|---|---|
-| **LLM** | Multi-provider (Anthropic, OpenAI-compatible, xAI Grok, Ollama) | Pluggable — use whatever provider works for you |
-| **Embeddings** | Multi-provider (Voyage, Google, OpenAI) *(optional)* | Configurable via env vars |
-| **Vector store** | SQLite + numpy cosine | Zero infra. Swap for pgvector or a vector DB when you outgrow it |
+| **LLM** | Google Gemini / Anthropic Claude / OpenAI-compatible | Pluggable — use whatever provider works for you |
+| **Embeddings** | Voyage AI / Google / OpenAI *(optional)* | Configurable via env vars; keyword fallback when unset |
+| **Vision** | Gemini / Claude / GPT-4o *(optional)* | Extracts text from circuit diagrams and image-heavy PDFs |
+| **Vector store** | SQLite + numpy cosine | Zero infra. Swap for pgvector when you outgrow it |
 | **Backend** | FastAPI + Uvicorn | Async, typed, minimal |
-| **Frontend** | React 19 + Vite + Tailwind CSS + shadcn/ui | Dark/light theming, modular components, builds to static SPA |
-| **Ingestion** | `pypdf` + `python-pptx` | Native PDF and PowerPoint extraction |
-| **Messaging** | WhatsApp Cloud API *(optional)* | Upload docs and ask questions from WhatsApp |
+| **Frontend** | React 19 + Vite + Tailwind CSS + shadcn/ui | Dark/light theming, PWA, installable on mobile |
+| **Ingestion** | pypdf + python-pptx + python-docx + openpyxl + PyMuPDF | PDF, PPTX, DOCX, Excel |
+| **Safety** | `safety_gate.py` + `diagnosis_fsm.py` | Deterministic pre-LLM hazard routing + evidence-quality FSM |
 
 ---
 
 ## Operating modes
 
-| | With embeddings configured | Without |
+| | With embeddings | Without |
 |---|---|---|
-| **Retrieval** | Semantic vector search | Pass last ~20 chunks to the LLM |
-| **Scales to** | Thousands of pages | A few short manuals (demo / single-doc workflows) |
-| **Providers** | Voyage, Google, or OpenAI embeddings | LLM provider only |
+| **Retrieval** | Semantic vector search | Keyword-based fallback |
+| **Scales to** | Thousands of pages | A few short manuals |
+| **Providers** | Voyage, Google, or OpenAI | Any LLM provider |
 
-Recommended path: try without embeddings first to validate the loop, add an embedding provider when you ingest your second manual.
+Start without embeddings to validate the loop. Add Voyage or Google embeddings when you ingest your second manual — retrieval quality improves noticeably on mixed-language or technical documents.
 
 ---
 
@@ -222,22 +281,7 @@ Tribal knowledge has been a known problem in industry for decades. Every solutio
 
 The reason these all fail is the same: **contribution friction**. If saving knowledge costs more than re-solving the problem, knowledge doesn't get saved.
 
-Technician AI bets that LLMs finally close that gap. Three taps and one sentence is the contribution. Claude does the structuring, the embedding, the searching, the retrieval. The technician just answers the question they were going to answer anyway.
-
----
-
-## What's explicitly *not* in v0
-
-These all matter eventually. They don't matter for proving the loop works.
-
-- Auth, multi-tenancy, RBAC
-- Mobile-native app, voice/photo input
-- Formal parts/equipment ontology
-- Versioning and admin UI for knowledge curation
-- Observability, analytics, billing
-- A polished design system
-
-Everything in v0 is in service of one question: **does the capture loop actually close?**
+Technician AI bets that LLMs finally close that gap. Three taps and one sentence is the contribution. The LLM does the structuring, the embedding, the searching, the retrieval. The technician just answers the question they were going to answer anyway.
 
 ---
 
@@ -245,20 +289,24 @@ Everything in v0 is in service of one question: **does the capture loop actually
 
 **Backbone (✓ shipped)**
 - Polymorphic SQLite store, cosine retrieval, optional embeddings
-- Citation-grounded answers via Claude Opus 4.7
-- PDF + PPTX ingestion
+- Citation-grounded answers, multi-provider LLM support (Gemini, Claude, OpenAI)
+- PDF + PPTX + DOCX + Excel ingestion
+- Vision extraction for circuit diagrams and image-heavy PDFs
 - Three-tap feedback → structured knowledge entry
+- **Safety Gate** — deterministic hazard routing before diagnosis
+- **Diagnosis FSM** — evidence-quality controls, SAFETY_HOLD enforcement
+- Progressive Web App — installable on iOS and Android
 
 **Next**
 - Voice input on the answer page (mobile-first capture)
 - Photo attachment on knowledge entries
 - "Conflict surfaced" UI when manual and field note disagree
 - Per-knowledge-entry validation count and decay
+- Retrieval routing by document type (circuit diagram vs. SOP vs. checklist)
 - pgvector backend for >100K chunks
 
 **Beyond**
 - Multi-tenant deployment story
-- Native mobile (iOS / Android)
 - Equipment / parts ontology
 - Real-time collaboration on a single fix-in-progress
 
@@ -268,7 +316,7 @@ Everything in v0 is in service of one question: **does the capture loop actually
 
 This is open source because the problem is bigger than any single team. PRs welcome on:
 
-- New ingestion formats (`.docx`, `.html`, video transcripts)
+- New ingestion formats (`.html`, video transcripts, P&ID diagrams)
 - Alternative LLM/embedding providers (drop-in adapters)
 - UI improvements (the v0 is intentionally bare; bring taste)
 - Real-world test corpora and example datasets
@@ -280,7 +328,7 @@ Open an issue first for anything bigger than a bug fix so we can align on direct
 
 ## Acknowledgments
 
-Built on the shoulders of giants — Anthropic Claude, FastAPI, SQLite, React, Tailwind CSS, shadcn/ui, and the long lineage of people who figured out how to capture institutional knowledge before us.
+Built on the shoulders of giants — Google Gemini, Anthropic Claude, FastAPI, SQLite, React, Tailwind CSS, shadcn/ui, Voyage AI, and the long lineage of people who figured out how to capture institutional knowledge before us.
 
 ---
 
