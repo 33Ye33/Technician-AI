@@ -8,10 +8,10 @@ interface HeaderProps {
 export function Header({ topicCount, entryCount }: HeaderProps) {
   return (
     <header>
-      <div className="max-w-[1320px] mx-auto px-6">
+      <div className="max-w-[1320px] mx-auto px-3 sm:px-6">
         {/* Letterhead row */}
-        <div className="flex items-baseline justify-between py-3 border-b border-border">
-          <h1 className="font-mono text-[28px] tracking-[0.12em] leading-none uppercase">
+        <div className="flex items-baseline justify-between py-2.5 sm:py-3 border-b border-border">
+          <h1 className="font-mono text-[22px] sm:text-[28px] tracking-[0.08em] sm:tracking-[0.12em] leading-none uppercase">
             Technician <span className="text-green-400">AI</span><span className="text-green-400 animate-pulse">_</span>
           </h1>
           <div className="flex items-center gap-6">

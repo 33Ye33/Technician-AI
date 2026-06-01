@@ -47,4 +47,6 @@ export interface DiagnoseResponse {
   conversation_id: number | null;
   session_id: string;
   step: number;
+  is_safety_critical?: boolean;
+  hazard_type?: string | null;
 }

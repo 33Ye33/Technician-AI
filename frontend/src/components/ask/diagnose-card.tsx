@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { Send, CheckCircle } from "lucide-react";
+import { Send, CheckCircle, ShieldAlert } from "lucide-react";
 import { Markdown } from "@/components/shared/markdown";
 import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { SourceList } from "./source-list";
+import { FeedbackWidget } from "./feedback-widget";
 import { Spinner } from "@/components/shared/spinner";
 import { api } from "@/hooks/use-api";
 import type { DiagnoseResponse } from "@/types/api";
@@ -17,16 +18,19 @@ interface HistoryEntry {
 
 interface DiagnoseCardProps {
   initial: DiagnoseResponse;
+  question?: string;
 }
 
-export function DiagnoseCard({ initial }: DiagnoseCardProps) {
+export function DiagnoseCard({ initial, question }: DiagnoseCardProps) {
   const [sessionId] = useState(initial.session_id);
   const [history, setHistory] = useState<HistoryEntry[]>([
     { role: "assistant", content: initial.message },
   ]);
   const [resolved, setResolved] = useState(initial.is_resolved);
   const [sources, setSources] = useState(initial.sources);
+  const [conversationId, setConversationId] = useState<number | null>(initial.conversation_id);
   const [step, setStep] = useState(initial.step);
+  const [isSafetyCritical, setIsSafetyCritical] = useState(initial.is_safety_critical ?? false);
   const [answer, setAnswer] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -42,9 +46,11 @@ export function DiagnoseCard({ initial }: DiagnoseCardProps) {
       const res = await api.diagnoseStep(sessionId, text);
       setHistory((h) => [...h, { role: "assistant", content: res.message }]);
       setStep(res.step);
+      if (res.is_safety_critical === false) setIsSafetyCritical(false);
       if (res.is_resolved) {
         setResolved(true);
         setSources(res.sources);
+        setConversationId(res.conversation_id);
       }
     } catch {
       setHistory((h) => [...h, { role: "assistant", content: "Error — please try again." }]);
@@ -55,14 +61,24 @@ export function DiagnoseCard({ initial }: DiagnoseCardProps) {
 
   return (
     <Card className="border-l-4 border-l-green-500">
+      {question && (
+        <div className="px-4 pt-4 pb-2 border-b border-border">
+          <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground mb-1">Problem reported</p>
+          <p className="text-sm font-medium text-foreground">{question}</p>
+        </div>
+      )}
       <CardContent className="pt-4 space-y-3">
         <div className="flex items-center justify-between">
           <span className="text-xs font-mono text-muted-foreground">
-            Diagnostic &middot; Step {step}
+            {isSafetyCritical ? "Safety Hold" : `Diagnostic · Step ${step}`}
           </span>
           {resolved ? (
             <span className="text-xs font-mono text-green-400 flex items-center gap-1">
               <CheckCircle className="h-3 w-3" /> Root cause confirmed
+            </span>
+          ) : isSafetyCritical ? (
+            <span className="text-xs font-mono text-destructive flex items-center gap-1">
+              <ShieldAlert className="h-3 w-3" /> Confirm personnel and equipment are safe before diagnosis
             </span>
           ) : step < 3 ? (
             <span className="text-xs font-mono text-muted-foreground">
@@ -77,25 +93,18 @@ export function DiagnoseCard({ initial }: DiagnoseCardProps) {
         <Separator />
 
         {/* Conversation history */}
-        <div className="space-y-2">
+        <div className="space-y-3">
           {history.map((msg, i) => (
-            <div
-              key={i}
-              className={`text-sm rounded-sm px-3 py-2 ${
-                msg.role === "assistant"
-                  ? "bg-muted/50 border border-border"
-                  : "bg-primary/10 border border-primary/20"
-              }`}
-            >
-              <span className="text-[10px] font-mono uppercase text-muted-foreground block mb-1">
-                {msg.role === "assistant" ? "AI" : "You"}
-              </span>
-              {msg.role === "assistant" ? (
+            msg.role === "assistant" ? (
+              <div key={i} className="text-sm">
                 <Markdown>{msg.content}</Markdown>
-              ) : (
+              </div>
+            ) : (
+              <div key={i} className="text-sm px-3 py-2 rounded-sm bg-primary/10 border border-primary/20">
+                <span className="text-[10px] font-mono uppercase text-muted-foreground block mb-1">You</span>
                 <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
-              )}
-            </div>
+              </div>
+            )
           ))}
         </div>
 
@@ -129,6 +138,9 @@ export function DiagnoseCard({ initial }: DiagnoseCardProps) {
         )}
 
         {resolved && sources.length > 0 && <SourceList sources={sources} />}
+        {resolved && conversationId != null && (
+          <FeedbackWidget conversationId={conversationId} />
+        )}
       </CardContent>
     </Card>
   );

@@ -10,8 +10,8 @@ import { api } from "@/hooks/use-api";
 import type { AskResponse, DiagnoseResponse, KnowledgeEntry, Topic } from "@/types/api";
 
 type ResultView =
-  | { kind: "ask"; data: AskResponse }
-  | { kind: "diagnose"; data: DiagnoseResponse };
+  | { kind: "ask"; data: AskResponse; question: string }
+  | { kind: "diagnose"; data: DiagnoseResponse; question: string };
 
 export default function App() {
   const [result, setResult] = useState<ResultView | null>(null);
@@ -32,10 +32,11 @@ export default function App() {
     setResult(null);
     try {
       const data = await api.ask(question);
-      setResult({ kind: "ask", data });
+      setResult({ kind: "ask", data, question });
     } catch (err) {
       setResult({
         kind: "ask",
+        question,
         data: {
           answer: err instanceof Error ? err.message : "Something went wrong.",
           sources: [],
@@ -52,10 +53,11 @@ export default function App() {
     setResult(null);
     try {
       const data = await api.diagnoseStart(question);
-      setResult({ kind: "diagnose", data });
+      setResult({ kind: "diagnose", data, question });
     } catch (err) {
       setResult({
         kind: "ask",
+        question,
         data: {
           answer: err instanceof Error ? err.message : "Diagnose failed.",
           sources: [],
@@ -71,8 +73,8 @@ export default function App() {
     <div className="min-h-screen flex flex-col">
       <Header topicCount={topics.length} entryCount={entries.length} />
 
-      <div className="flex-1 max-w-[1320px] mx-auto w-full px-6 py-5">
-        <div className="flex flex-col lg:flex-row gap-8">
+      <div className="flex-1 max-w-[1320px] mx-auto w-full px-3 sm:px-6 py-4 sm:py-5 pb-safe">
+        <div className="flex flex-col lg:flex-row gap-5 lg:gap-8">
           <main className="flex-1 min-w-0 space-y-5">
             <section>
               <h2 className="text-sm font-mono uppercase tracking-[0.15em] text-muted-foreground mb-3">
@@ -82,8 +84,8 @@ export default function App() {
             </section>
 
             {loading && <Spinner />}
-            {result?.kind === "ask" && !loading && <AnswerCard result={result.data} />}
-            {result?.kind === "diagnose" && !loading && <DiagnoseCard initial={result.data} />}
+            {result?.kind === "ask" && !loading && <AnswerCard result={result.data} question={result.question} />}
+            {result?.kind === "diagnose" && !loading && <DiagnoseCard initial={result.data} question={result.question} />}
 
             {entries.length > 0 && (
               <section>

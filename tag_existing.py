@@ -8,7 +8,7 @@ import json
 
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(override=True)
 
 import db
 import tagger

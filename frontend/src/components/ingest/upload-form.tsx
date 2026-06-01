@@ -45,7 +45,7 @@ export function UploadForm({ onComplete }: UploadFormProps) {
       <input
         ref={inputRef}
         type="file"
-        accept=".pdf,.pptx"
+        accept=".pdf,.pptx,.docx,.xlsx,.xls"
         className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0];
@@ -57,7 +57,7 @@ export function UploadForm({ onComplete }: UploadFormProps) {
         <>
           <Upload className="h-6 w-6 mx-auto mb-2 text-muted-foreground" />
           <p className="text-xs text-muted-foreground mb-2">
-            Drop a PDF or PPTX here
+            Drop a PDF, PPTX, DOCX, or Excel here
           </p>
           <Button
             variant="secondary"

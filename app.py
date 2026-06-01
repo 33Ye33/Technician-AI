@@ -11,12 +11,14 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 import db
+import diagnosis_fsm
 import ingest
 import rag
+import safety_gate
 
 _diag_sessions: dict[str, dict] = {}
 
-load_dotenv()
+load_dotenv(override=True)
 
 templates = Jinja2Templates(directory="templates")
 
@@ -29,9 +31,12 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(title="Technician AI", lifespan=lifespan)
 
+_static_dir = Path(__file__).parent / "static"
 
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request):
+    if _static_dir.exists() and (_static_dir / "index.html").exists():
+        return FileResponse(_static_dir / "index.html")
     entries = db.list_knowledge_entries(limit=20)
     topics = db.list_topics(include_documents=True)
     return templates.TemplateResponse(
@@ -147,6 +152,25 @@ async def api_ingest(file: UploadFile = File(...)):
     return {"filename": file.filename, "chunks": chunks}
 
 
+@app.get("/api/manuals")
+def api_manuals():
+    return {"manuals": db.list_manuals()}
+
+
+@app.delete("/api/manuals/{title:path}")
+def api_delete_manual(title: str):
+    deleted = db.delete_manual(title)
+    if deleted == 0:
+        raise HTTPException(status_code=404, detail="manual not found")
+    file_path = Path("manuals") / title
+    for ext in (".pdf", ".pptx", ".docx", ".xlsx", ".xls"):
+        candidate = file_path.with_suffix(ext)
+        if candidate.exists():
+            candidate.unlink()
+            break
+    return {"deleted_chunks": deleted}
+
+
 @app.get("/api/knowledge")
 def api_knowledge():
     return {"entries": db.list_knowledge_entries(limit=200)}
@@ -163,12 +187,30 @@ def api_diagnose_start(question: str = Form(...)):
     if not question:
         raise HTTPException(status_code=400, detail="empty question")
     session_id = str(uuid.uuid4())
-    result = rag.diagnose_step(question, history=[], questions_asked=0)
+
+    # Classify whether the question involves a safety-critical hazard.
+    hazard = safety_gate.classify_safety_critical(question)
+
+    # Create an FSM session seeded with safety context.
+    fsm = diagnosis_fsm.new_session(
+        question, is_safety_critical=bool(hazard), hazard_type=hazard
+    )
+
+    result = rag.diagnose_step(question, history=[], questions_asked=0, session=fsm)
+
     _diag_sessions[session_id] = {
         "question": question,
         "history": [{"role": "assistant", "content": result["message"]}],
+        "fsm": fsm,
     }
-    return {**result, "session_id": session_id, "step": 1}
+
+    return {
+        **result,
+        "session_id": session_id,
+        "step": 1,
+        "is_safety_critical": result.get("is_safety_critical", bool(hazard)),
+        "hazard_type": result.get("hazard_type", hazard),
+    }
 
 
 @app.post("/api/diagnose/step")
@@ -182,21 +224,34 @@ def api_diagnose_continue(
     session = _diag_sessions.get(session_id)
     if session is None:
         raise HTTPException(status_code=400, detail="session not found")
+
     question = session["question"]
     history = list(session["history"])
+    fsm = session.get("fsm", {})
+
     questions_asked = sum(1 for m in history if m["role"] == "assistant")
+
+    # Determine the last assistant message to give the FSM transition context.
+    last_assistant_message = next(
+        (m["content"] for m in reversed(history) if m["role"] == "assistant"),
+        "",
+    )
+
+    # Advance FSM state based on the last assistant prompt and the user answer.
+    diagnosis_fsm.advance_state(fsm, last_assistant_message, answer)
+
     history.append({"role": "user", "content": answer})
-    result = rag.diagnose_step(question, history, questions_asked=questions_asked)
+    result = rag.diagnose_step(question, history, questions_asked=questions_asked, session=fsm)
     if not result["is_resolved"]:
         history.append({"role": "assistant", "content": result["message"]})
     session["history"] = history
+    session["fsm"] = fsm
     step = sum(1 for m in session["history"] if m["role"] == "assistant")
     return {**result, "session_id": session_id, "step": step}
 
 
 # --- SPA static serving ---
 
-_static_dir = Path(__file__).parent / "static"
 if _static_dir.exists():
     app.mount("/assets", StaticFiles(directory=_static_dir / "assets"), name="spa-assets")
 

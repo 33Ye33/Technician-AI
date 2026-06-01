@@ -24,6 +24,12 @@ async function get<T>(url: string): Promise<T> {
   return res.json();
 }
 
+async function httpDelete<T>(url: string): Promise<T> {
+  const res = await fetch(url, { method: "DELETE" });
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  return res.json();
+}
+
 export const api = {
   ask: (question: string) => post<AskResponse>("/api/ask", { question }),
 
@@ -42,6 +48,10 @@ export const api = {
   knowledge: () => get<{ entries: KnowledgeEntry[] }>("/api/knowledge"),
 
   topics: () => get<{ topics: Topic[] }>("/api/topics"),
+
+  manuals: () => get<{ manuals: { title: string; chunks: number; source_path: string }[] }>("/api/manuals"),
+
+  deleteManual: (title: string) => httpDelete<{ deleted_chunks: number }>(`/api/manuals/${encodeURIComponent(title)}`),
 
   diagnoseStart: (question: string) =>
     post<DiagnoseResponse>("/api/diagnose", { question }),

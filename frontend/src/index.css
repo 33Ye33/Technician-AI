@@ -2,6 +2,15 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
+/* Safe-area padding for notched phones (iPhone X+) */
+.pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
+
+/* Prevent text size inflation on mobile rotation */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+
+/* Better tap targets on mobile */
+button, [role="button"] { touch-action: manipulation; }
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {

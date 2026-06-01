@@ -4,6 +4,10 @@ from __future__ import annotations
 
 import os
 
+from dotenv import load_dotenv
+
+load_dotenv(override=True)
+
 EMBED_PROVIDER = os.environ.get("EMBED_PROVIDER", "").lower()
 EMBED_MODEL = os.environ.get("EMBED_MODEL")
 EMBED_DIM = os.environ.get("EMBED_DIM")
@@ -13,8 +17,8 @@ if not EMBED_PROVIDER:
         EMBED_PROVIDER = "voyage"
     elif os.environ.get("GOOGLE_API_KEY"):
         EMBED_PROVIDER = "google"
-    elif os.environ.get("OPENAI_API_KEY"):
-        EMBED_PROVIDER = "openai"
+    # OpenAI key is NOT auto-detected for embeddings — it's primarily the LLM key.
+    # Set EMBED_PROVIDER=openai explicitly to enable OpenAI embeddings.
 
 EMBEDDINGS_ENABLED = bool(EMBED_PROVIDER)
 

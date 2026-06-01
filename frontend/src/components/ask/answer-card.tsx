@@ -5,7 +5,7 @@ import { SourceList } from "./source-list";
 import { FeedbackWidget } from "./feedback-widget";
 import type { AskResponse } from "@/types/api";
 
-export function AnswerCard({ result }: { result: AskResponse }) {
+export function AnswerCard({ result, question }: { result: AskResponse; question?: string }) {
   return (
     <Card className="border-l-4 border-l-primary">
       <CardContent className="pt-4 space-y-3">
@@ -17,6 +17,11 @@ export function AnswerCard({ result }: { result: AskResponse }) {
             {result.sources.length} source{result.sources.length !== 1 && "s"} cited
           </span>
         </div>
+        {question && (
+          <p className="text-sm font-medium text-foreground border-l-2 border-muted-foreground/30 pl-3 italic">
+            {question}
+          </p>
+        )}
         <Separator />
         <Markdown>{result.answer}</Markdown>
         <SourceList sources={result.sources} />

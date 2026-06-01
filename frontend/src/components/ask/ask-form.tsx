@@ -17,14 +17,12 @@ export function AskForm({ onSubmit, onDiagnose, loading }: AskFormProps) {
     const q = question.trim();
     if (!q || loading) return;
     onSubmit(q);
-    setQuestion("");
   }
 
   function handleDiagnose() {
     const q = question.trim();
     if (!q || loading) return;
     onDiagnose(q);
-    setQuestion("");
   }
 
   return (
