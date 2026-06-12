@@ -18,9 +18,8 @@ from . import safety as safety_gate
 
 _diag_sessions: dict[str, dict] = {}
 
-load_dotenv(override=True)
-
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+load_dotenv(dotenv_path=PROJECT_ROOT / ".env", override=True)
 
 templates = Jinja2Templates(directory=str(PROJECT_ROOT / "templates"))
 
