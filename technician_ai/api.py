@@ -67,9 +67,15 @@ def feedback(
         raise HTTPException(status_code=400, detail="invalid kind")
 
     if kind == "worked":
+        db.update_conversation_status(conversation_id, "worked")
         return HTMLResponse(
             '<div class="msg ok">Marked as worked. Thanks!</div>'
         )
+
+    if kind == "failed":
+        db.update_conversation_status(conversation_id, "failed")
+    elif kind == "learned":
+        db.update_conversation_status(conversation_id, "learned")
 
     note = (note or "").strip()
     if not note:
@@ -128,7 +134,13 @@ def api_feedback(
     if kind not in ("worked", "failed", "learned"):
         raise HTTPException(status_code=400, detail="invalid kind")
     if kind == "worked":
+        db.update_conversation_status(conversation_id, "worked")
         return {"message": "Marked as worked. Thanks!"}
+    if kind == "failed":
+        db.update_conversation_status(conversation_id, "failed")
+    elif kind == "learned":
+        db.update_conversation_status(conversation_id, "learned")
+
     note = (note or "").strip()
     if not note:
         raise HTTPException(status_code=400, detail="note required for failed/learned")
