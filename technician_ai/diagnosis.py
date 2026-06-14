@@ -367,14 +367,7 @@ def check_resolution_allowed(session):
     if session["is_safety_critical"] and session["safety_confirmed"]:
         return (True, "")
 
-    # Gate 4: minimum three questions.
-    if session["questions_asked"] < 3:
-        remaining = 3 - session["questions_asked"]
-        return (
-            False,
-            f"[FSM OVERRIDE] You must ask at least {remaining} more diagnostic question(s) "
-            "before providing a resolution. Continue gathering information."
-        )
+    # Gate 4: no minimum question count — resolve only when evidence warrants it.
 
     # Gate 5: door detected but obstruction not yet checked.
     if session["has_safety_door"] and not session["obstruction_checked"]:

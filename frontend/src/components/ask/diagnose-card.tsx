@@ -7,9 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { SourceList } from "./source-list";
 import { FeedbackWidget } from "./feedback-widget";
+import { ResolutionCard } from "./resolution-card";
 import { Spinner } from "@/components/shared/spinner";
 import { api } from "@/hooks/use-api";
-import type { DiagnoseResponse } from "@/types/api";
+import type { DiagnoseResponse, Resolution } from "@/types/api";
 
 interface HistoryEntry {
   role: "user" | "assistant";
@@ -27,6 +28,10 @@ export function DiagnoseCard({ initial, question }: DiagnoseCardProps) {
     { role: "assistant", content: initial.message },
   ]);
   const [resolved, setResolved] = useState(initial.is_resolved);
+  const [resolution, setResolution] = useState<Resolution | null>(initial.resolution ?? null);
+  const [resolvedMsgIdx, setResolvedMsgIdx] = useState<number | null>(
+    initial.is_resolved ? 0 : null
+  );
   const [sources, setSources] = useState(initial.sources);
   const [conversationId, setConversationId] = useState<number | null>(initial.conversation_id);
   const [step, setStep] = useState(initial.step);
@@ -44,11 +49,19 @@ export function DiagnoseCard({ initial, question }: DiagnoseCardProps) {
 
     try {
       const res = await api.diagnoseStep(sessionId, text);
-      setHistory((h) => [...h, { role: "assistant", content: res.message }]);
+      console.log("[DiagnoseCard] step response:", res);
+      setHistory((h) => {
+        const next = [...h, { role: "assistant" as const, content: res.message }];
+        if (res.is_resolved) {
+          setResolvedMsgIdx(next.length - 1);
+        }
+        return next;
+      });
       setStep(res.step);
       if (res.is_safety_critical === false) setIsSafetyCritical(false);
       if (res.is_resolved) {
         setResolved(true);
+        setResolution(res.resolution ?? null);
         setSources(res.sources);
         setConversationId(res.conversation_id);
       }
@@ -97,7 +110,11 @@ export function DiagnoseCard({ initial, question }: DiagnoseCardProps) {
           {history.map((msg, i) => (
             msg.role === "assistant" ? (
               <div key={i} className="text-sm">
-                <Markdown>{msg.content}</Markdown>
+                {i === resolvedMsgIdx && resolution ? (
+                  <ResolutionCard resolution={resolution} />
+                ) : (
+                  <Markdown>{msg.content}</Markdown>
+                )}
               </div>
             ) : (
               <div key={i} className="text-sm px-3 py-2 rounded-sm bg-primary/10 border border-primary/20">
