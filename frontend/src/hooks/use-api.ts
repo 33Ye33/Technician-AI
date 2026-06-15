@@ -51,6 +51,8 @@ export const api = {
 
   manuals: () => get<{ manuals: { title: string; chunks: number; source_path: string }[] }>("/api/manuals"),
 
+  manualFiles: () => get<{ files: { name: string; size: number; url: string }[] }>("/api/manuals/files"),
+
   deleteManual: (title: string) => httpDelete<{ deleted_chunks: number }>(`/api/manuals/${encodeURIComponent(title)}`),
 
   diagnoseStart: (question: string) =>

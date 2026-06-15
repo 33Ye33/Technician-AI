@@ -27,12 +27,13 @@ export function AskForm({ onSubmit, onDiagnose, loading }: AskFormProps) {
 
   return (
     <form onSubmit={handleSubmit}>
+      <p className="text-[11px] font-mono text-foreground tracking-wide mb-2">
+        Type the issue you ran into on the line in the box below
+      </p>
       <Textarea
         value={question}
         onChange={(e) => setQuestion(e.target.value)}
-        placeholder={
-          "• What's the torque spec for the M8 bracket?\n• Why does the laminator throw non-contact errors after fusion?\n• Give me an EI check method to validate modules."
-        }
+        placeholder=""
         className="min-h-[110px] resize-none font-mono text-[13px] leading-relaxed bg-card border-border rounded-sm"
         onKeyDown={(e) => {
           if (e.key === "Enter" && !e.shiftKey) {

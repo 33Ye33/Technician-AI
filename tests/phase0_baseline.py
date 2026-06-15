@@ -401,6 +401,138 @@ EVIDENCE_CONTROL_TEST_CASES = [
     },
 ]
 
+# ---------------------------------------------------------------------------
+# Spec association regression tests
+# ---------------------------------------------------------------------------
+
+SPEC_ASSOCIATION_TEST_CASES = [
+    {
+        "id": "TC-SA-01",
+        "name": "Air supply pressure query returns MPa standard",
+        "severity": "HIGH",
+        "route": "/api/ask",
+        "input": "What is the required air supply pressure for the First Glass Loading machine?",
+        "required_response_elements": [
+            "0.6",
+            "MPa",
+            "0.5",
+            "0.7",
+        ],
+        "prohibited_behavior": [
+            "Returning a kPa vacuum value for an air pressure question",
+            "Returning -95 or -65 kPa as the air supply standard",
+        ],
+        "pass_criteria": "Response includes 0.6 ± 0.1 MPa (or 0.5–0.7 MPa); no vacuum kPa values",
+    },
+    {
+        "id": "TC-SA-02",
+        "name": "Pickup arm vacuum query returns kPa standard",
+        "severity": "HIGH",
+        "route": "/api/ask",
+        "input": (
+            "What is the vacuum pressure specification for the glass pickup arm "
+            "on the First Glass Loading machine while holding glass?"
+        ),
+        "required_response_elements": [
+            "kPa",
+            "-95",
+            "-65",
+        ],
+        "prohibited_behavior": [
+            "Returning 0.6 MPa as the vacuum standard",
+            "Confusing air supply pressure with vacuum pressure",
+        ],
+        "pass_criteria": "Response includes -95 to -65 kPa; does not cite 0.6 MPa",
+    },
+    {
+        "id": "TC-SA-03",
+        "name": "Intermittent pickup Diagnose must not apply MPa to vacuum question",
+        "severity": "CRITICAL",
+        "route": "/api/diagnose",
+        "input": (
+            "The first glass loader has been acting weird since this morning. "
+            "Sometimes it picks up the glass fine, but every once in a while it either "
+            "doesn't lift it all the way or sets it down crooked. There's no alarm right now."
+        ),
+        "simulated_answers": [
+            "I see a little bit of paper near the pallet but it doesn't look like it's in the way.",
+            "I checked the vacuum gauge and it looked like it dropped when the glass didn't come up.",
+        ],
+        "required_response_elements": [
+            "must ask about vacuum in kPa if asking for a measurement",
+            "must NOT cite 0.6 MPa as the vacuum standard",
+            "may cite -95 to -65 kPa OR ask for observation without a stated range",
+        ],
+        "prohibited_behavior": [
+            "Asking whether vacuum is within 0.6 ± 0.1 MPa",
+            "Applying the machine air supply pressure standard to the vacuum system",
+            "Using MPa as the unit for a vacuum reading question",
+        ],
+        "pass_criteria": (
+            "spec_guard.detect_spec_mismatch returns None for the response; "
+            "no MPa value cited in vacuum context"
+        ),
+    },
+    {
+        "id": "TC-SA-04",
+        "name": "Multiple pressure values — only component-compatible value used",
+        "severity": "HIGH",
+        "route": "/api/ask",
+        "input": (
+            "The glass pickup arm is not picking up glass reliably. "
+            "What vacuum level should I expect to see during a successful pickup?"
+        ),
+        "required_response_elements": [
+            "kPa values in the vacuum range (-95 to -65)",
+        ],
+        "prohibited_behavior": [
+            "Citing 0.6 MPa as a relevant specification for this question",
+            "Mixing air supply pressure (MPa) into a vacuum performance answer",
+        ],
+        "pass_criteria": "Only vacuum-specific kPa spec returned; no MPa values",
+    },
+    {
+        "id": "TC-SA-05",
+        "name": "Safety regression — broken glass still triggers Safety Alert",
+        "severity": "CRITICAL",
+        "route": "/api/diagnose",
+        "input": "A sheet of glass broke near the robot arm while the machine was running.",
+        "simulated_answers": [],
+        "required_response_elements": [
+            "Safety Alert before any diagnostic question",
+        ],
+        "prohibited_behavior": [
+            "Asking about air pressure or vacuum before issuing safety response",
+        ],
+        "pass_criteria": "Safety gate fires deterministically; spec_guard does not interfere",
+    },
+]
+
+# Spec mismatch unit test expectations
+SPEC_MISMATCH_TESTS = [
+    # (response_text, query_context, expect_mismatch: bool)
+    (
+        "Is the vacuum reading within 0.6 ± 0.1 MPa?",
+        "glass pickup arm vacuum suction",
+        True,  # MPa in vacuum context → mismatch
+    ),
+    (
+        "Is the vacuum reading within -95 to -65 kPa while holding glass?",
+        "glass pickup arm vacuum suction",
+        False,  # correct spec → no mismatch
+    ),
+    (
+        "Is the air supply pressure within 0.6 ± 0.1 MPa at startup?",
+        "machine air supply pressure startup",
+        False,  # correct spec → no mismatch
+    ),
+    (
+        "Is the air supply within -65 kPa?",
+        "machine air supply pressure",
+        True,  # vacuum kPa in air supply context → mismatch
+    ),
+]
+
 # Evidence classification unit test expectations
 EVIDENCE_CLASSIFICATION_TESTS = [
     ("The gauge reads -50 kPa.", "CONFIRMED"),

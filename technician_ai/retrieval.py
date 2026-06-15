@@ -72,14 +72,9 @@ For pneumatic movement incidents (and ONLY for pneumatic incidents): do NOT incl
 
 Turn-by-turn rules:
 1. FIRST turn only (non-safety-critical): Read the problem and sources. Identify the 2-3 most plausible root causes. Ask ONE targeted, observable yes/no or short-answer question the technician can answer by inspecting the machine right now. Do NOT list the causes yet. Do NOT give repair steps.
-2. FOLLOW-UP turns: Review every answer so far. Update your working hypothesis. Ask ONE new question that either confirms the leading cause or rules it out. Vary the type of check (visual, audible, measurement) to build a fuller picture.
-3. MINIMUM QUESTIONS: Do NOT resolve until the progress note confirms at least 3 questions have been answered. The only exception is an immediately safety-critical situation (imminent injury, fire, or electrical hazard) — if that applies, issue the SAFETY ALERT immediately and resolve only after the hazard is confirmed controlled.
-4. RESOLUTION: Only when you have gathered sufficient evidence, begin your response with exactly "RESOLVED:" on its own line, then provide all four sections:
-   - Blocking condition: [the confirmed, measurable reason the machine cannot operate — state this with high confidence if the technician confirmed a condition outside the source-defined operating standard]
-   - Suspected cause: [the underlying component or failure believed responsible — only state a specific component if the technician provided direct observable evidence OR the source explicitly supports that conclusion; otherwise write "Undetermined — further inspection required"]
-   - Confidence: [High / Medium / Low] — [one sentence justification]
-   - Next steps: [numbered list — only include actions supported by the retrieved sources; for any repair the sources do not cover, write "Escalate to qualified maintenance personnel"]
-   - Sources: [cite inline as [#1], [#2] matching the numbered snippets]
+2. FOLLOW-UP turns: Internally update your working hypothesis. Do NOT output a summary of findings, a working hypothesis block, or intermediate confidence ratings — just ask ONE new question that either confirms the leading cause or rules it out. Vary the type of check (visual, audible, measurement) to build a fuller picture.
+3. KEEP ASKING: Do NOT resolve until you have at least one CONFIRMED observation that directly explains the symptom. If all evidence so far is approximate, suspected, or hearsay, ask one more targeted question. Only stop when the root cause is confirmed — not based on how many questions have been asked. The only exception is an immediately safety-critical situation.
+4. RESOLUTION: Only when you have at least one CONFIRMED observation, begin your response with exactly "RESOLVED:" on its own line, then immediately use the exact section labels defined in RESOLUTION OUTPUT STRUCTURE below — do not use markdown headers (##), emojis, or any other format.
 5. Cite sources inline as [#N] in diagnostic questions too — note which source supports your hypothesis.
 6. Never ask more than 6 questions total before resolving regardless of outcome.
 7. One question per turn. Be concise. No preamble or filler.
@@ -89,11 +84,14 @@ Evidence rules (apply at every turn):
 9. Do NOT name a specific component as the cause unless the technician has confirmed observable evidence of that component's failure, or a retrieved source explicitly links the symptom to that component.
 10. For any safety door or interlock alarm: before concluding a sensor or latch failure, first ask whether any material, packaging, pallet, or physical obstruction is preventing the door from fully closing.
 11. Only recommend repair or replacement steps that are explicitly supported by the retrieved sources. If the sources do not cover the required repair, instruct the technician to escalate to qualified maintenance personnel rather than inventing procedures.
+12. REPAIR AUTHORIZATION: In Next steps, do NOT instruct the technician to "replace" or "swap" a part themselves unless the retrieved source explicitly authorizes that action for a line technician. Instead write: "Have Equipment Maintenance inspect and replace [part] using the approved maintenance procedure." or "Do not continue using the affected [component] until it has been inspected or replaced by authorized maintenance." Only say "you can replace" if a source explicitly grants that to the technician role.
+13. NEGATIVE PRESSURE WORDING: When comparing a negative vacuum reading against a spec range, do NOT use vague phrases like "below the range" or "lower than expected." State explicitly: "The measured [X] kPa is outside the required [A] to [B] kPa range and indicates weaker-than-required vacuum." (Numerically, -65 kPa is weaker than -70 kPa; "below" is ambiguous for negative numbers.)
 
 EVIDENCE CLASSIFICATION (apply internally every turn):
 Classify each technician observation as one of:
-- CONFIRMED: exact stated measurement, clearly stated visible defect, documented alarm, direct sensory observation with no hedging language.
-  Examples: "The gauge reads -50 kPa", "There is a visible crack in the cup", "HMI shows Fault Code 32"
+- CONFIRMED: exact stated measurement, clearly stated visible defect, direct sensory observation with no hedging language.
+  Examples: "The gauge reads -50 kPa", "There is a visible crack in the cup", "The belt is visibly jammed against the frame"
+  NOTE: An alarm code (e.g. "HMI shows E-47") confirms that a fault was detected, but is NOT by itself a root cause. An alarm code is CONFIRMED evidence of a symptom only. You must ask at least one more question to identify the physical cause behind the alarm before resolving.
 - APPROXIMATE: estimated or uncertain measurement with hedging.
   Examples: "It looked like about -50", "The gauge moved around some", "Roughly -70 kPa"
 - SUSPECTED: plausible but unverified; technician hedges.
@@ -113,7 +111,7 @@ RESOLUTION THRESHOLD — non-safety scenarios:
 Do NOT resolve with HIGH confidence unless at least one of the following is true:
 1. A CONFIRMED, stated measurement is outside a source-defined operating standard and directly explains the symptom.
 2. A CONFIRMED, clearly visible physical defect directly explains the symptom (no hedging from technician).
-3. A documented alarm code plus a CONFIRMED field observation converge on the same cause.
+3. A documented alarm code AND a CONFIRMED physical field observation both converge on the same root cause. The alarm code alone is not sufficient — the physical cause behind the alarm must be confirmed by the technician.
 4. Two independent CONFIRMED observations independently support the same root cause.
 
 When all available evidence is APPROXIMATE, SUSPECTED, or HEARSAY:
@@ -122,24 +120,32 @@ When all available evidence is APPROXIMATE, SUSPECTED, or HEARSAY:
 - Preserve alternative explanations not yet ruled out.
 - Either ask one more targeted confirmation question, or output a working hypothesis with LOW/MEDIUM confidence.
 
-RESOLUTION OUTPUT STRUCTURE — use the format appropriate to the evidence:
+RESOLUTION OUTPUT STRUCTURE — use these exact section labels, in this exact order:
 
-If CONFIRMED evidence supports the conclusion:
+If CONFIRMED evidence supports the conclusion, output exactly:
   RESOLVED:
-  - Confirmed condition: [what was directly confirmed — measurement, observation, alarm]
-  - Likely cause: [only if evidence directly supports it]
-  - Confidence: [High or Medium] — [one-sentence justification citing the confirmed evidence]
-  - Next steps: [source-supported only; otherwise "Escalate to qualified maintenance personnel"]
-  - Sources: [cite inline as [#N]]
+
+  Likely cause:
+  [Specific component or condition confirmed as the root cause. One sentence, plain English.]
+
+  Next steps:
+  1. [First action — source-supported]
+  2. [Second action — source-supported]
+  3. [If repair not covered by sources: "Escalate to qualified maintenance personnel"]
+
+  Confirmed condition:
+  [The specific observation(s) that confirmed the root cause, with source citation [#N].]
+
+  Confidence: High
+  [One sentence justification.]
+
+  Sources: [#N], [#N]
+
+Use "Confidence: High", "Confidence: Medium", or "Confidence: Low" on ONE line — value immediately after the colon.
+Do NOT use markdown headers (##), emojis, bold labels, or bullet dashes for section labels.
 
 If evidence is APPROXIMATE, SUSPECTED, or mixed:
-  RESOLVED:
-  - Observations so far: [list, noting uncertainty where applicable]
-  - Working hypothesis — not yet confirmed: [what is suspected, with explicit caveats]
-  - Alternatives not yet ruled out: [list other plausible causes that remain open]
-  - Next confirmation step: [specific targeted verification that could yield a CONFIRMED observation]
-  - Confidence: Low or Medium — [one-sentence justification]
-  - Sources: [cite inline as [#N]]
+  Do NOT output RESOLVED. Ask ONE more targeted question to obtain a CONFIRMED observation.
 
 INTERMITTENT / MULTI-SYMPTOM BEHAVIOR:
 When a symptom is intermittent (sometimes works, sometimes does not) or involves multiple overlapping symptoms with no active alarm:
@@ -250,6 +256,80 @@ _GROUNDING_NOTE = (
     "\n\n_Note: No source document was retrieved supporting this repair procedure. "
     "Escalate to qualified maintenance personnel._"
 )
+
+
+def _parse_resolution(message: str) -> dict:
+    """Extract structured fields from a RESOLVED message.
+
+    Uses position-based slicing: finds each section label in the text,
+    then extracts the content block between that label and the next one.
+    Works whether the content is on the same line or the next line.
+    Handles both new plain-label format and old ## markdown-header format.
+    """
+    print("[_parse_resolution] raw input:\n", repr(message[:800]))
+
+    label_patterns: dict[str, list[str]] = {
+        "likely_cause":       [r"^Likely cause:",          r"^##[^\n]*Root Cause"],
+        "next_steps":         [r"^Next steps?:",            r"^##[^\n]*Next Steps?"],
+        "confirmed_condition":[r"^Confirmed condition:",    r"^##[^\n]*Issue Identified"],
+        "confidence":         [r"^Confidence:",             r"\*\*Confidence:\*\*"],
+        "sources":            [r"^Sources:"],
+    }
+
+    # Find the start + end of each label in the text
+    positions: dict[str, tuple[int, int]] = {}
+    for key, patterns in label_patterns.items():
+        for p in patterns:
+            m = re.search(p, message, re.IGNORECASE | re.MULTILINE)
+            if m:
+                positions[key] = (m.start(), m.end())
+                break
+
+    def get_content(key: str) -> str:
+        if key not in positions:
+            return ""
+        _, label_end = positions[key]
+        label_start = positions[key][0]
+        # Next section starts at the minimum start position that is > label_start
+        next_start = len(message)
+        for other_key, (other_start, _) in positions.items():
+            if other_start > label_start:
+                next_start = min(next_start, other_start)
+        raw = message[label_end:next_start].strip()
+        # Strip markdown bold markers
+        return re.sub(r"\*\*([^*]+)\*\*", r"\1", raw).strip()
+
+    likely_cause       = get_content("likely_cause")
+    next_steps_raw     = get_content("next_steps")
+    confirmed_condition= get_content("confirmed_condition")
+    confidence_raw     = get_content("confidence")
+
+    # Parse confidence level + justification
+    confidence_level = "medium"
+    confidence_justification = ""
+    if confidence_raw:
+        cm = re.match(r"(high|medium|low)[^\w]*(.*)", confidence_raw, re.IGNORECASE | re.DOTALL)
+        if cm:
+            confidence_level = cm.group(1).lower()
+            confidence_justification = re.sub(r"^[—–\-\s]+", "", cm.group(2)).strip()
+
+    # Parse next steps into a list
+    next_steps: list[str] = []
+    for line in next_steps_raw.split("\n"):
+        line = re.sub(r"^[\d]+[.)]\s*", "", line.strip())
+        line = re.sub(r"^[-•*]\s*", "", line)
+        if line:
+            next_steps.append(line)
+
+    result = {
+        "likely_cause": likely_cause,
+        "next_steps": next_steps,
+        "confirmed_condition": confirmed_condition,
+        "confidence_level": confidence_level,
+        "confidence_justification": confidence_justification,
+    }
+    print("[_parse_resolution] parsed:", result)
+    return result
 
 
 def grounding_guard(response: str) -> str:
@@ -539,12 +619,13 @@ def diagnose_step(
             )
     context_note = (
         f"\n\n[Diagnostic progress: {qa_count} question(s) asked so far. "
-        f"Minimum 3 must be answered before resolving unless safety-critical.{evidence_note}]"
+        f"Resolve only when root cause is CONFIRMED — keep asking if uncertain.{evidence_note}]"
     )
     initial_content = (
         f"Sources:\n\n{sources_block}\n\n---\n\n"
-        f"Problem reported: {question}{context_note}"
+        f"Problem reported: {question}"
     )
+    system_prompt = system_prompt + context_note
     messages = [{"role": "user", "content": initial_content}] + history
     packed = "\n\n".join(
         f"[{m['role'].upper()}]: {m['content']}" for m in messages
@@ -581,6 +662,7 @@ def diagnose_step(
     # ------------------------------------------------------------------
     is_resolved = raw.startswith("RESOLVED:")
     message = raw[len("RESOLVED:"):].strip() if is_resolved else raw.strip()
+    message = re.sub(r"\[Diagnostic progress:[^\]]*\]\s*", "", message).strip()
 
     if is_resolved:
         message = grounding_guard(message)
@@ -615,9 +697,12 @@ def diagnose_step(
         doc_ids = [s["id"] for s in snippets]
         conv_id = db.insert_conversation(question, message, doc_ids)
 
+    resolution = _parse_resolution(message) if is_resolved else None
+
     return {
         "message": message,
         "is_resolved": is_resolved,
+        "resolution": resolution,
         "is_safety_critical": False,
         "hazard_type": None,
         "sources": [

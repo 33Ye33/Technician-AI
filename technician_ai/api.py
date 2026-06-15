@@ -170,6 +170,36 @@ def api_manuals():
     return {"manuals": db.list_manuals()}
 
 
+@app.get("/api/manuals/files")
+def api_manuals_files():
+    """List all files physically present in the manuals/ directory."""
+    manuals_dir = PROJECT_ROOT / "manuals"
+    if not manuals_dir.exists():
+        return {"files": []}
+    files = []
+    for f in sorted(manuals_dir.iterdir()):
+        if f.is_file() and not f.name.startswith(".") and f.name != ".gitkeep":
+            files.append({
+                "name": f.name,
+                "size": f.stat().st_size,
+                "url": f"/manuals/file/{f.name}",
+            })
+    return {"files": files}
+
+
+@app.get("/manuals/file/{filename:path}")
+def download_manual_file(filename: str):
+    """Serve a file from the manuals/ directory for download or inline viewing."""
+    manuals_dir = (PROJECT_ROOT / "manuals").resolve()
+    file_path = (manuals_dir / filename).resolve()
+    if not str(file_path).startswith(str(manuals_dir)):
+        raise HTTPException(status_code=403, detail="access denied")
+    if not file_path.exists() or not file_path.is_file():
+        raise HTTPException(status_code=404, detail="file not found")
+    media_type = "application/pdf" if file_path.suffix.lower() == ".pdf" else "application/octet-stream"
+    return FileResponse(file_path, media_type=media_type, filename=filename)
+
+
 @app.delete("/api/manuals/{title:path}")
 def api_delete_manual(title: str):
     deleted = db.delete_manual(title)
