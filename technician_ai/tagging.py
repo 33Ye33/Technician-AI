@@ -10,8 +10,8 @@ import json
 import logging
 import os
 
-import entry_types
-import llm_client
+from . import entry_types
+from . import llm as llm_client
 
 log = logging.getLogger(__name__)
 

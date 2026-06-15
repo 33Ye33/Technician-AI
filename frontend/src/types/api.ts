@@ -40,11 +40,22 @@ export interface FeedbackResponse {
   message?: string;
 }
 
+export interface Resolution {
+  likely_cause: string;
+  next_steps: string[];
+  confirmed_condition: string;
+  confidence_level: "high" | "medium" | "low";
+  confidence_justification: string;
+}
+
 export interface DiagnoseResponse {
   message: string;
   is_resolved: boolean;
+  resolution?: Resolution | null;
   sources: Source[];
   conversation_id: number | null;
   session_id: string;
   step: number;
+  is_safety_critical?: boolean;
+  hazard_type?: string | null;
 }

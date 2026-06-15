@@ -16,6 +16,8 @@ if not LLM_PROVIDER:
         LLM_PROVIDER = "anthropic"
     elif os.environ.get("OPENAI_API_KEY"):
         LLM_PROVIDER = "openai"
+    elif os.environ.get("GOOGLE_API_KEY"):
+        LLM_PROVIDER = "google"
 
 _client = None
 
@@ -42,11 +44,19 @@ def _get_client():
             api_key=LLM_API_KEY or os.environ.get("OPENAI_API_KEY"),
             base_url=LLM_BASE_URL,
         )
+    elif LLM_PROVIDER == "google":
+        try:
+            from google import genai
+        except ImportError:
+            raise ImportError("pip install google-genai")
+        _client = genai.Client(
+            api_key=LLM_API_KEY or os.environ.get("GOOGLE_API_KEY"),
+        )
     else:
         raise RuntimeError(
             f"Unknown LLM_PROVIDER={LLM_PROVIDER!r}. "
-            "Set LLM_PROVIDER to 'anthropic' or 'openai', "
-            "or set ANTHROPIC_API_KEY / OPENAI_API_KEY for auto-detection."
+            "Set LLM_PROVIDER to 'anthropic', 'openai', or 'google', "
+            "or set the corresponding API key env var for auto-detection."
         )
     return _client
 
@@ -117,6 +127,35 @@ def _chat_openai(
     return response.choices[0].message.content or ""
 
 
+def _chat_google(
+    system: str,
+    user_message: str,
+    model: str,
+    max_tokens: int,
+    json_schema: dict | None,
+) -> str:
+    from google.genai import types
+    client = _get_client()
+
+    config_kwargs: dict = dict(
+        system_instruction=system,
+        max_output_tokens=max_tokens,
+    )
+    if json_schema is not None:
+        config_kwargs["response_mime_type"] = "application/json"
+        config_kwargs["response_schema"] = json_schema
+
+    response = client.models.generate_content(
+        model=model,
+        config=types.GenerateContentConfig(**config_kwargs),
+        contents=user_message,
+    )
+    text = response.text or ""
+    if json_schema is not None:
+        return _extract_json_fallback(text)
+    return text
+
+
 def _extract_json_fallback(text: str) -> str:
     """Best-effort JSON extraction when structured output isn't available."""
     try:
@@ -149,8 +188,11 @@ def chat(
         )
     elif LLM_PROVIDER == "openai":
         return _chat_openai(system, user_message, model, max_tokens, json_schema)
+    elif LLM_PROVIDER == "google":
+        return _chat_google(system, user_message, model, max_tokens, json_schema)
     else:
         raise RuntimeError(
             f"Unknown LLM_PROVIDER={LLM_PROVIDER!r}. "
-            "Set LLM_PROVIDER or an API key env var."
+            "Set LLM_PROVIDER to 'anthropic', 'openai', or 'google', "
+            "or set the corresponding API key env var."
         )
