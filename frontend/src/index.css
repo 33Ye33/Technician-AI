@@ -2,6 +2,20 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
+/* Safe-area padding for notched phones (iPhone X+) */
+.pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
+
+/* Diagnosis confidence level colors */
+.confidence-high   { color: #22c55e; font-weight: 600; }
+.confidence-medium { color: #b7791f; font-weight: 600; }
+.confidence-low    { color: #ef4444; font-weight: 600; }
+
+/* Prevent text size inflation on mobile rotation */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+
+/* Better tap targets on mobile */
+button, [role="button"] { touch-action: manipulation; }
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
