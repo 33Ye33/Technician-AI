@@ -9,8 +9,8 @@ from __future__ import annotations
 import json
 import os
 
-import entry_types
-import llm_client
+from . import entry_types
+from . import llm as llm_client
 
 MODEL = os.environ.get("TECHNICIAN_AI_MODEL", "claude-opus-4-7")
 
