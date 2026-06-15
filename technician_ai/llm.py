@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 
@@ -121,7 +122,7 @@ def _chat_openai(
             "json_schema": {"name": "response", "strict": True, "schema": json_schema},
         }
 
-    print(f"[llm_client] calling model={model} base_url={LLM_BASE_URL}")
+    logging.getLogger(__name__).info("calling model=%s base_url=%s", model, LLM_BASE_URL)
     response = client.chat.completions.create(**kwargs)
     return response.choices[0].message.content or ""
 
