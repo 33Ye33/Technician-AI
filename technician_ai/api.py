@@ -68,6 +68,7 @@ def feedback(
 
     if kind == "worked":
         db.update_conversation_status(conversation_id, "worked")
+        db.update_conversation_feedback_note(conversation_id, None)
         return HTMLResponse(
             '<div class="msg ok">Marked as worked. Thanks!</div>'
         )
@@ -83,6 +84,7 @@ def feedback(
             '<div class="msg warn">Add a note describing what you learned, then submit again.</div>'
         )
 
+    db.update_conversation_feedback_note(conversation_id, note)
     entry = rag.record_knowledge_from_feedback(conversation_id, kind, note)
     if entry is None:
         raise HTTPException(status_code=404, detail="conversation not found")
@@ -135,6 +137,7 @@ def api_feedback(
         raise HTTPException(status_code=400, detail="invalid kind")
     if kind == "worked":
         db.update_conversation_status(conversation_id, "worked")
+        db.update_conversation_feedback_note(conversation_id, None)
         return {"message": "Marked as worked. Thanks!"}
     if kind == "failed":
         db.update_conversation_status(conversation_id, "failed")
@@ -144,6 +147,8 @@ def api_feedback(
     note = (note or "").strip()
     if not note:
         raise HTTPException(status_code=400, detail="note required for failed/learned")
+
+    db.update_conversation_feedback_note(conversation_id, note)
     entry = rag.record_knowledge_from_feedback(conversation_id, kind, note)
     if entry is None:
         raise HTTPException(status_code=404, detail="conversation not found")

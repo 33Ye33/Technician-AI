@@ -60,6 +60,9 @@ def init_db() -> None:
         if "status" not in columns:
             conn.execute("ALTER TABLE conversations ADD COLUMN status TEXT")
             conn.commit()
+        if "feedback_note" not in columns:
+            conn.execute("ALTER TABLE conversations ADD COLUMN feedback_note TEXT")
+            conn.commit()
     finally:
         conn.close()
 
@@ -242,11 +245,23 @@ def update_conversation_status(conversation_id: int, status: str) -> None:
         conn.close()
 
 
+def update_conversation_feedback_note(conversation_id: int, note: str | None) -> None:
+    conn = connect()
+    try:
+        conn.execute(
+            "UPDATE conversations SET feedback_note = ? WHERE id = ?",
+            (note, conversation_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def get_conversation(conversation_id: int) -> dict | None:
     conn = connect()
     try:
         row = conn.execute(
-            "SELECT id, question, answer, retrieved_doc_ids_json, status FROM conversations WHERE id = ?",
+            "SELECT id, question, answer, retrieved_doc_ids_json, status, feedback_note FROM conversations WHERE id = ?",
             (conversation_id,),
         ).fetchone()
         if row is None:
@@ -257,6 +272,7 @@ def get_conversation(conversation_id: int) -> dict | None:
             "answer": row["answer"],
             "retrieved_doc_ids": json.loads(row["retrieved_doc_ids_json"]),
             "status": row["status"],
+            "feedback_note": row["feedback_note"],
         }
     finally:
         conn.close()

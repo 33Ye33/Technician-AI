@@ -25,12 +25,30 @@ class FeedbackStatusTests(unittest.TestCase):
 
             with sqlite3.connect(db_path) as conn:
                 row = conn.execute(
-                    "SELECT status FROM conversations WHERE id = ?",
-                    (conversation_id,),
-                ).fetchone()
+                "SELECT status, feedback_note FROM conversations WHERE id = ?",
+                (conversation_id,),
+            ).fetchone()
 
-            self.assertEqual(row[0], "worked")
+        self.assertEqual(row[0], "worked")
+        self.assertIsNone(row[1])
 
+    # Ensure feedback notes are persisted when provided.
+    conversation_id = database.insert_conversation(
+        "Why did it stop?",
+        "Check the conveyor.",
+        [],
+    )
+    database.update_conversation_status(conversation_id, "failed")
+    database.update_conversation_feedback_note(conversation_id, "The motor stalled at the end of shift.")
+
+    with sqlite3.connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT status, feedback_note FROM conversations WHERE id = ?",
+            (conversation_id,),
+        ).fetchone()
+
+    self.assertEqual(row[0], "failed")
+    self.assertEqual(row[1], "The motor stalled at the end of shift.")
 
 if __name__ == "__main__":
     unittest.main()
