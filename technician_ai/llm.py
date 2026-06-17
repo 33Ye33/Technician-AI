@@ -6,6 +6,12 @@ import json
 import logging
 import os
 import re
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+load_dotenv(dotenv_path=PROJECT_ROOT / ".env", override=False)
 
 LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "").lower()
 LLM_BASE_URL = os.environ.get("LLM_BASE_URL")

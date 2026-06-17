@@ -6,33 +6,6 @@
   <div class="answer-body">
     <div class="answer-text">{{ answer }}</div>
 
-    {% if sources %}
-    <div class="sources">
-      <div class="sources-head">References</div>
-      {% for s in sources %}
-        <div class="src">
-          <div class="src-num">[#{{ s.index }}]</div>
-          <div class="src-body">
-            {% if s.kind == 'manual_chunk' %}
-              <span class="src-label">{{ s.metadata.get('title', s.metadata.get('manual_title', 'untitled')) }}</span>
-              <span class="src-meta"> — {{ s.metadata.get('manual_title', '?') }}{% if s.metadata.get('page') %} · p.{{ s.metadata.page }}{% elif s.metadata.get('slide') %} · slide {{ s.metadata.slide }}{% endif %}</span>
-            {% else %}
-              <span class="src-label">{{ s.metadata.get('title', 'Field note') }}</span>
-              <span class="src-meta"> — captured field knowledge</span>
-            {% endif %}
-            {% if s.metadata.get('topic_path') %}
-              <span class="tag" style="margin-left: 0.4rem;">{{ s.metadata.topic_path|join('/') }}</span>
-            {% endif %}
-            {% if s.metadata.get('entry_type') %}
-              <span class="tag tag-{{ s.metadata.entry_type }}">{{ s.metadata.entry_type }}</span>
-            {% endif %}
-            <span class="src-preview">{{ s.preview }}{% if s.preview|length >= 200 %}…{% endif %}</span>
-          </div>
-        </div>
-      {% endfor %}
-    </div>
-    {% endif %}
-
     <div class="feedback" id="feedback-{{ conversation_id }}">
       <span class="feedback-prompt">Mark outcome ▸</span>
       <button class="btn btn-secondary"
@@ -67,5 +40,39 @@
         <button type="submit" class="btn">Save</button>
       </form>
     </div>
+
+    {% if sources %}
+    <div class="sources">
+      <details class="sources-details">
+        <summary class="sources-head">
+          <span>References</span>
+          <span class="sources-count">({{ sources|length }})</span>
+        </summary>
+        <div class="src-list">
+          {% for s in sources %}
+            <div class="src">
+              <div class="src-num">[#{{ s.index }}]</div>
+              <div class="src-body">
+                {% if s.kind == 'manual_chunk' %}
+                  <span class="src-label">{{ s.metadata.get('title', s.metadata.get('manual_title', 'untitled')) }}</span>
+                  <span class="src-meta"> — {{ s.metadata.get('manual_title', '?') }}{% if s.metadata.get('page') %} · p.{{ s.metadata.page }}{% elif s.metadata.get('slide') %} · slide {{ s.metadata.slide }}{% endif %}</span>
+                {% else %}
+                  <span class="src-label">{{ s.metadata.get('title', 'Field note') }}</span>
+                  <span class="src-meta"> — captured field knowledge</span>
+                {% endif %}
+                {% if s.metadata.get('topic_path') %}
+                  <span class="tag" style="margin-left: 0.4rem;">{{ s.metadata.topic_path|join('/') }}</span>
+                {% endif %}
+                {% if s.metadata.get('entry_type') %}
+                  <span class="tag tag-{{ s.metadata.entry_type }}">{{ s.metadata.entry_type }}</span>
+                {% endif %}
+                <span class="src-preview">{{ s.preview }}{% if s.preview|length >= 200 %}…{% endif %}</span>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      </details>
+    </div>
+    {% endif %}
   </div>
 </div>
