@@ -55,8 +55,19 @@ The goal is not just to answer from manuals. The goal is to make every troublesh
 
 ### Session Memory + Knowledge Capture
 - Records the full troubleshooting trail: user questions, AI suggestions, technician replies, steps attempted, final resolution, and unresolved findings
-- Converts field-discovered issues that are missing from manuals or SOPs into a separate searchable knowledge repository
+- Converts field-discovered issues that are missing from manuals or SOPs into a separate searchable **Internal Knowledge** base
 - Reuses prior resolved cases alongside official documentation on future questions
+- **History tab** in the Library lets any technician replay past sessions, see ratings, and read field comments
+
+### Feedback & Ratings
+- After every Q&A answer or diagnosis resolution: **Worked / Didn't work** outcome buttons + **1–5 star rating** + optional comment — all inline, no popup
+- Comments are automatically structured and saved to the Internal Knowledge base for future retrieval
+- All feedback is stored in the session record and visible in History
+
+### Two Distinct Knowledge Bases
+- **Manuals** — ingested PDFs, PPTX, DOCX, Excel work instructions (official docs)
+- **Internal Knowledge** — field notes, technician feedback, and session learnings captured on the floor
+- Citations clearly label each source type: `[#N] Manual · page X` vs `[#N] Internal Knowledge · Machine`
 
 ### Safety-First Diagnosis
 Before any troubleshooting begins, the system detects safety-critical incidents:
@@ -110,9 +121,15 @@ Drop a manual into the system, ask a question, get a cited answer:
 The air supply pressure must be maintained at 0.5–0.7 MPa [#3].
 
 Sources
-  [#3] MANUAL — Maintenance Manual, section 2.2.23
+  [#3] Manual · Maintenance Manual, p.12
+  [#4] Internal Knowledge · Glass Loading Machine
 
-[ Worked ]  [ Didn't work ]  [ I learned something ]
+Did this fix the issue?
+[ Worked ]  [ Didn't work ]
+
+Rate this answer:  ★ ★ ★ ★ ☆
+Add a comment (optional) — what happened on the floor?
+[ Submit Rating ]
 ```
 
 For a safety incident:
@@ -446,15 +463,17 @@ Technician AI bets that LLMs finally close that gap. Three taps and one sentence
 - Citation-grounded answers, multi-provider LLM support (Gemini, Claude, OpenAI)
 - PDF + PPTX + DOCX + Excel ingestion
 - Vision extraction for circuit diagrams and image-heavy PDFs
-- Three-tap feedback → structured knowledge entry
 - **Safety Gate** — deterministic hazard routing before diagnosis
 - **Diagnosis FSM** — evidence-quality controls, SAFETY_HOLD enforcement
 - Progressive Web App — installable on iOS and Android
+- Full session memory: every question, answer, troubleshooting step, outcome, and final resolution stored to SQLite
+- **Library → History tab** — replay any past session, see turn count, rating, and field comments
+- **Inline feedback** — Worked / Didn't work + 1–5 star rating + comment after every response
+- **Two knowledge bases** — Manuals vs. Internal Knowledge, with labeled citations
+- Technician comments auto-promoted to Internal Knowledge for future retrieval
+- Automatic language detection and same-language answers across Q&A and diagnosis
 
 **Agent Workflow (next)**
-- Full session memory: every question, answer, troubleshooting step, outcome, and final resolution
-- Session-to-knowledge promotion for production discoveries missing from manuals or SOPs
-- Automatic language detection and same-language answers across Q&A and diagnosis
 - Escalation triggers for repeated loops, low-confidence diagnosis, safety risk, and long unresolved sessions
 - Supervisor handoff packet with timeline, evidence, attempted fixes, and suspected causes
 
