@@ -34,10 +34,11 @@ function SourceItem({ source }: { source: Source }) {
 
   let label = isManual
     ? `${(meta.manual_title as string) || "Manual"}`
-    : "Field note";
+    : `Internal Knowledge`;
 
   if (isManual && meta.page) label += `, p.${meta.page}`;
   if (isManual && meta.slide) label += `, slide ${meta.slide}`;
+  if (!isManual && meta.machine) label += ` · ${meta.machine}`;
 
   const topicPath = meta.topic_path as string[] | undefined;
   const entryType = meta.entry_type as string | undefined;

@@ -4,6 +4,7 @@ import { Markdown } from "@/components/shared/markdown";
 import { SourceList } from "@/components/ask/source-list";
 import { FeedbackWidget } from "@/components/ask/feedback-widget";
 import { ResolutionCard } from "@/components/ask/resolution-card";
+import { DiagnoseRatingWidget } from "@/components/diagnose-rating-widget";
 import { Spinner } from "@/components/shared/spinner";
 import type { AskMessage, DiagMessage, Tab } from "./types";
 
@@ -89,7 +90,8 @@ function AskBubble({ msg }: { msg: AskMessage }) {
       </div>
       <Markdown>{data.answer}</Markdown>
       <SourceList sources={data.sources} />
-      {data.conversation_id > 0 && <FeedbackWidget conversationId={data.conversation_id} />}
+      {data.conversation_id > 0 && <FeedbackWidget conversationId={data.conversation_id} hideAddNote />}
+      {data.conversation_id > 0 && <DiagnoseRatingWidget conversationId={data.conversation_id} label="Rate this answer" />}
     </AssistantShell>
   );
 }
@@ -124,9 +126,8 @@ function DiagBubble({ msg }: { msg: DiagMessage }) {
       )}
 
       {data.is_resolved && data.sources.length > 0 && <SourceList sources={data.sources} />}
-      {data.is_resolved && data.conversation_id != null && (
-        <FeedbackWidget conversationId={data.conversation_id} />
-      )}
+      {data.is_resolved && data.conversation_id != null && <FeedbackWidget conversationId={data.conversation_id} hideAddNote />}
+      {data.is_resolved && <DiagnoseRatingWidget sessionId={data.session_id} />}
     </AssistantShell>
   );
 }

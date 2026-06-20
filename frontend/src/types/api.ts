@@ -59,3 +59,25 @@ export interface DiagnoseResponse {
   is_safety_critical?: boolean;
   hazard_type?: string | null;
 }
+
+export interface DiagnoseHistoryTurn {
+  role: "user" | "assistant";
+  text: string;
+  doc_ids?: number[];
+  step: number;
+}
+
+export interface DiagnoseSession {
+  session_id: string;
+  machine: string | null;
+  question: string;
+  is_resolved: boolean;
+  final_resolution: string | null;
+  confidence: string | null;
+  rating: number | null;
+  feedback_comment: string | null;
+  turn_count?: number;
+  history?: DiagnoseHistoryTurn[];
+  created_at: string;
+  updated_at: string;
+}

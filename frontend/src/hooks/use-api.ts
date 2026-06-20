@@ -1,6 +1,7 @@
 import type {
   AskResponse,
   DiagnoseResponse,
+  DiagnoseSession,
   FeedbackResponse,
   IngestResponse,
   KnowledgeEntry,
@@ -60,4 +61,23 @@ export const api = {
 
   diagnoseStep: (sessionId: string, answer: string) =>
     post<DiagnoseResponse>("/api/diagnose/step", { session_id: sessionId, answer }),
+
+  diagnoseSessions: () =>
+    get<{ sessions: DiagnoseSession[] }>("/api/diagnose/sessions"),
+
+  diagnoseSession: (sessionId: string) =>
+    get<DiagnoseSession>(`/api/diagnose/sessions/${sessionId}`),
+
+  diagnoseSessionFeedback: (sessionId: string, rating: number, comment?: string) =>
+    post<{ ok: boolean }>(`/api/diagnose/sessions/${sessionId}/feedback`, {
+      rating: String(rating),
+      ...(comment ? { comment } : {}),
+    }),
+
+  conversationRating: (conversationId: number, rating: number, comment?: string) =>
+    fetch(`/api/conversations/${conversationId}/rating`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rating, comment }),
+    }).then((r) => r.json() as Promise<{ ok: boolean }>),
 };

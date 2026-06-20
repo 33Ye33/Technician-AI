@@ -71,7 +71,8 @@ For broken glass specifically (and ONLY for broken glass — do not apply these 
 For pneumatic movement incidents (and ONLY for pneumatic incidents): do NOT include broken-glass cleanup instructions, PPE-for-cleanup instructions, or door-closure instructions. These are hazard-specific to broken glass only.
 
 Turn-by-turn rules:
-1. FIRST turn only (non-safety-critical): Read the problem and sources. Identify the 2-3 most plausible root causes. Ask ONE targeted, observable yes/no or short-answer question the technician can answer by inspecting the machine right now. Do NOT list the causes yet. Do NOT give repair steps.
+0. ESCALATION CHECK (before anything else, non-safety-critical): Before asking any diagnostic question, scan the retrieved sources for explicit escalation instructions — phrases like "report to team lead", "notify supervisor", "stop production", "contact maintenance", "do not continue", or "ask for equipment assistance". If the reported problem matches the condition described in such an instruction, output the escalation directive FIRST and do NOT begin a diagnostic investigation. Example: if a source says "report to team lead if multiple [X] occur in a row" and the technician reports multiple [X] in a row, tell them to report to team lead immediately before asking anything else.
+1. FIRST turn only (non-safety-critical): Read the problem and sources. Identify the 2-3 most plausible root causes. Ask ONE targeted, observable yes/no or short-answer question the technician can answer by inspecting the machine right now. Do NOT list the causes yet. Do NOT give repair steps. IMPORTANT: If the problem description uses words like "always", "every time", "exactly", "consistent", or "same every time", skip random/physical causes (debris, slippage, cart misalignment) and ask first about recent maintenance, setting changes, or HMI calibration values — consistent symptoms point to systematic causes, not random ones.
 2. FOLLOW-UP turns: Internally update your working hypothesis. Do NOT output a summary of findings, a working hypothesis block, or intermediate confidence ratings — just ask ONE new question that either confirms the leading cause or rules it out. Vary the type of check (visual, audible, measurement) to build a fuller picture.
 3. KEEP ASKING: Do NOT resolve until you have at least one CONFIRMED observation that directly explains the symptom. If all evidence so far is approximate, suspected, or hearsay, ask one more targeted question. Only stop when the root cause is confirmed — not based on how many questions have been asked. The only exception is an immediately safety-critical situation.
 4. RESOLUTION: Only when you have at least one CONFIRMED observation, begin your response with exactly "RESOLVED:" on its own line, then immediately use the exact section labels defined in RESOLUTION OUTPUT STRUCTURE below — do not use markdown headers (##), emojis, or any other format.
@@ -154,6 +155,12 @@ When a symptom is intermittent (sometimes works, sometimes does not) or involves
 - Compare measurements against documented standards only when the reading is CONFIRMED.
 - Keep alternative contributors open until actively ruled out by confirmed evidence.
 - Recommend targeted verification rather than immediate replacement or repair.
+
+CONSISTENT / REPEATABLE SYMPTOMS:
+When the technician describes a symptom using words like "always", "every time", "exactly", "consistent", "same every time", "never changes", or similar — treat this as a strong signal of a SYSTEMATIC root cause (calibration drift, parameter offset, coordinate reference error, worn component with fixed geometry, software setting change).
+- De-prioritize random or environmental causes (debris, dust, slippage, vibration) in your first questions — these produce variable symptoms, not perfectly repeatable ones.
+- Within 2 questions, focus on: Has anything been adjusted or serviced recently? Do HMI parameters or calibration values match their expected settings?
+- Do NOT spend multiple turns ruling out physical random causes when the symptom is described as perfectly consistent.
 
 DO NOT label an issue as "Blocking condition" unless it is supported by a CONFIRMED observation or a CONFIRMED measurement against a source-defined standard."""
 
@@ -266,7 +273,6 @@ def _parse_resolution(message: str) -> dict:
     Works whether the content is on the same line or the next line.
     Handles both new plain-label format and old ## markdown-header format.
     """
-    print("[_parse_resolution] raw input:\n", repr(message[:800]))
 
     label_patterns: dict[str, list[str]] = {
         "likely_cause":       [r"^Likely cause:",          r"^##[^\n]*Root Cause"],
@@ -328,7 +334,6 @@ def _parse_resolution(message: str) -> dict:
         "confidence_level": confidence_level,
         "confidence_justification": confidence_justification,
     }
-    print("[_parse_resolution] parsed:", result)
     return result
 
 
@@ -457,6 +462,45 @@ def record_knowledge_from_feedback(
         metadata=metadata,
     )
     return {"id": doc_id, **structured}
+
+
+def record_field_note(
+    question: str,
+    answer: str,
+    comment: str,
+    source_id: str | int,
+    source_type: str,
+    machine: str | None = None,
+) -> dict:
+    """Save a technician's field comment as an internal knowledge entry."""
+    prefix = f"Machine: {machine}\n" if machine else ""
+    text = f"{prefix}Q: {question}\nA: {answer}\nField note: {comment}"
+    embedding = (
+        embed_texts([text], input_type="document")[0] if EMBEDDINGS_ENABLED else None
+    )
+    tags = tagger.tag_content(
+        text,
+        source_label="(field feedback)",
+        existing_topics=db.list_existing_topic_paths(),
+    )
+    metadata = {
+        "question": question,
+        "source_id": str(source_id),
+        "source_type": source_type,
+        "origin": "field_feedback",
+        "topic_path": tags["topic_path"],
+        "entry_type": tags["entry_type"],
+        "title": tags["title"],
+    }
+    if machine:
+        metadata["machine"] = machine
+    doc_id = db.insert_document(
+        kind="knowledge_entry",
+        text=text,
+        embedding=embedding,
+        metadata=metadata,
+    )
+    return {"id": doc_id}
 
 
 def diagnose_step(

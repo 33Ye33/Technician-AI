@@ -6,9 +6,10 @@ import { api } from "@/hooks/use-api";
 
 interface FeedbackWidgetProps {
   conversationId: number;
+  hideAddNote?: boolean;
 }
 
-export function FeedbackWidget({ conversationId }: FeedbackWidgetProps) {
+export function FeedbackWidget({ conversationId, hideAddNote = false }: FeedbackWidgetProps) {
   const [state, setState] = useState<"idle" | "failed" | "learned" | "done">("idle");
   const [note, setNote] = useState("");
   const [message, setMessage] = useState("");
@@ -66,17 +67,21 @@ export function FeedbackWidget({ conversationId }: FeedbackWidgetProps) {
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2 pt-2">
-      <span className="text-xs font-mono text-muted-foreground mr-1">Outcome:</span>
-      <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => submit("worked")}>
-        <Check className="h-3 w-3 mr-1" /> Worked
-      </Button>
-      <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setState("failed")}>
-        <X className="h-3 w-3 mr-1" /> Didn't work
-      </Button>
-      <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setState("learned")}>
-        <PlusCircle className="h-3 w-3 mr-1" /> Add note
-      </Button>
+    <div className="pt-3 space-y-2">
+      <span className="text-xs font-semibold text-foreground">Did this fix the issue?</span>
+      <div className="flex flex-wrap gap-2">
+        <Button variant="outline" size="sm" className="h-8 text-sm border-2 font-medium" onClick={() => submit("worked")}>
+          <Check className="h-3.5 w-3.5 mr-1.5 text-emerald-500" /> Worked
+        </Button>
+        <Button variant="outline" size="sm" className="h-8 text-sm border-2 font-medium" onClick={() => setState("failed")}>
+          <X className="h-3.5 w-3.5 mr-1.5 text-destructive" /> Didn't work
+        </Button>
+        {!hideAddNote && (
+          <Button variant="outline" size="sm" className="h-8 text-sm border-2 font-medium" onClick={() => setState("learned")}>
+            <PlusCircle className="h-3.5 w-3.5 mr-1.5" /> Add note
+          </Button>
+        )}
+      </div>
     </div>
   );
 }

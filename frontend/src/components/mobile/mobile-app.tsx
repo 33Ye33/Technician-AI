@@ -135,6 +135,7 @@ export function MobileApp() {
         onOpenChange={setUploadOpen}
         onComplete={refresh}
       />
+
     </div>
   );
 }

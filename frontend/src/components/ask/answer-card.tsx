@@ -3,6 +3,7 @@ import { Separator } from "@/components/ui/separator";
 import { Markdown } from "@/components/shared/markdown";
 import { SourceList } from "./source-list";
 import { FeedbackWidget } from "./feedback-widget";
+import { DiagnoseRatingWidget } from "@/components/diagnose-rating-widget";
 import type { AskResponse } from "@/types/api";
 
 export function AnswerCard({ result, question }: { result: AskResponse; question?: string }) {
@@ -25,7 +26,8 @@ export function AnswerCard({ result, question }: { result: AskResponse; question
         <Separator />
         <Markdown>{result.answer}</Markdown>
         <SourceList sources={result.sources} />
-        <FeedbackWidget conversationId={result.conversation_id} />
+        <FeedbackWidget conversationId={result.conversation_id} hideAddNote />
+        <DiagnoseRatingWidget conversationId={result.conversation_id} label="Rate this answer" />
       </CardContent>
     </Card>
   );

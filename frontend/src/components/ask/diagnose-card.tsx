@@ -6,9 +6,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { SourceList } from "./source-list";
-import { FeedbackWidget } from "./feedback-widget";
 import { ResolutionCard } from "./resolution-card";
 import { Spinner } from "@/components/shared/spinner";
+import { FeedbackWidget } from "./feedback-widget";
+import { DiagnoseRatingWidget } from "@/components/diagnose-rating-widget";
 import { api } from "@/hooks/use-api";
 import type { DiagnoseResponse, Resolution } from "@/types/api";
 
@@ -38,7 +39,6 @@ export function DiagnoseCard({ initial, question }: DiagnoseCardProps) {
   const [isSafetyCritical, setIsSafetyCritical] = useState(initial.is_safety_critical ?? false);
   const [answer, setAnswer] = useState("");
   const [loading, setLoading] = useState(false);
-
   async function handleStep() {
     const text = answer.trim();
     if (!text || loading) return;
@@ -155,9 +155,8 @@ export function DiagnoseCard({ initial, question }: DiagnoseCardProps) {
         )}
 
         {resolved && sources.length > 0 && <SourceList sources={sources} />}
-        {resolved && conversationId != null && (
-          <FeedbackWidget conversationId={conversationId} />
-        )}
+        {resolved && conversationId != null && <FeedbackWidget conversationId={conversationId} hideAddNote />}
+        {resolved && <DiagnoseRatingWidget sessionId={sessionId} />}
       </CardContent>
     </Card>
   );

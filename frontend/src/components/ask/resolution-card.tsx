@@ -18,12 +18,12 @@ export function ResolutionCard({ resolution }: { resolution: Resolution }) {
   return (
     <div className="space-y-4 text-sm leading-relaxed">
       <div>
-        <p className="font-bold mb-1">Likely cause:</p>
+        <p className="font-bold mb-1 text-amber-500">Likely cause:</p>
         <p>{likely_cause || "—"}</p>
       </div>
 
       <div>
-        <p className="font-bold mb-1">Next steps:</p>
+        <p className="font-bold mb-1 text-blue-500">Next steps:</p>
         {next_steps.length > 0 ? (
           <ol className="list-decimal list-inside space-y-1">
             {next_steps.map((step, i) => (
@@ -36,12 +36,12 @@ export function ResolutionCard({ resolution }: { resolution: Resolution }) {
       </div>
 
       <div>
-        <p className="font-bold mb-1">Confirmed condition:</p>
+        <p className="font-bold mb-1 text-violet-500">Confirmed condition:</p>
         <p>{confirmed_condition || "—"}</p>
       </div>
 
       <div>
-        <p className="font-bold mb-1">Confidence level:</p>
+        <p className="font-bold mb-1 text-emerald-500">Confidence level:</p>
         <span className={confidenceClass[confidence_level]}>
           {confidenceLabel[confidence_level]}
         </span>

@@ -3,6 +3,8 @@ import { X, BookOpen, FileText, FileSpreadsheet, Download } from "lucide-react";
 import { TopicTree } from "@/components/knowledge/topic-tree";
 import { UploadForm } from "@/components/ingest/upload-form";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { DiagnoseHistory } from "@/components/diagnose-history";
+import { cn } from "@/lib/utils";
 import { api } from "@/hooks/use-api";
 import type { Topic } from "@/types/api";
 
@@ -22,6 +24,7 @@ function formatBytes(bytes: number): string {
 
 export function KnowledgeDrawer({ topics, onUploadComplete }: KnowledgeDrawerProps) {
   const [open, setOpen] = useState(false);
+  const [tab, setTab] = useState<"library" | "history">("library");
   const [manuals, setManuals] = useState<Manual[]>([]);
   const [manualFiles, setManualFiles] = useState<ManualFile[]>([]);
   const drawerRef = useRef<HTMLDivElement>(null);
@@ -48,7 +51,7 @@ export function KnowledgeDrawer({ topics, onUploadComplete }: KnowledgeDrawerPro
       <button
         onClick={() => setOpen(true)}
         className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-sm border border-border bg-card hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-        title="Manuals & Knowledge Tree"
+        title="Manuals & Internal Knowledge"
       >
         <BookOpen className="h-4 w-4" />
         <span className="text-[11px] font-mono uppercase tracking-wider hidden sm:inline">Library</span>
@@ -78,13 +81,34 @@ export function KnowledgeDrawer({ topics, onUploadComplete }: KnowledgeDrawerPro
           </button>
         </div>
 
+        {/* Tab switcher */}
+        <div className="flex border-b border-border shrink-0">
+          {(["library", "history"] as const).map((t) => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={cn(
+                "flex-1 py-2 text-[10px] font-mono uppercase tracking-wider transition-colors",
+                tab === t ? "text-foreground border-b-2 border-primary" : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+
         <ScrollArea className="flex-1 overflow-y-auto">
+          {tab === "history" ? (
+            <div className="p-4">
+              <DiagnoseHistory />
+            </div>
+          ) : (
           <div className="p-4 space-y-6">
 
-            {/* Knowledge Tree */}
+            {/* Internal Knowledge */}
             <section>
               <h2 className="text-[10px] font-mono uppercase tracking-[0.15em] text-muted-foreground mb-2">
-                Knowledge Tree
+                Internal Knowledge
               </h2>
               <div className="border border-border rounded-sm">
                 <div className="p-2">
@@ -152,6 +176,7 @@ export function KnowledgeDrawer({ topics, onUploadComplete }: KnowledgeDrawerPro
             </section>
 
           </div>
+          )}
         </ScrollArea>
       </div>
     </>

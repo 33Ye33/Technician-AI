@@ -18,6 +18,22 @@ from . import safety as safety_gate
 
 _diag_sessions: dict[str, dict] = {}
 
+_MACHINE_DISPLAY: list[tuple[tuple[str, ...], str]] = [
+    (("glass loading",), "Glass Loading Machine"),
+    (("edge trimming",), "Edge Trimming Machine"),
+    (("corner wrapping",), "Corner Wrapping Machine"),
+    (("busbar tab lifting", "busbar lifting", "tab lifting", "busbar leads lifting"), "Busbar Tab Lifting Machine"),
+    (("busbar soldering",), "Busbar Soldering Machine"),
+    (("all in one soldering", "all-in-one soldering", "soldering stringer"), "All-in-One Soldering Machine"),
+    (("junction box soldering",), "Junction Box Soldering Machine"),
+]
+
+def _detect_machine(query: str) -> str | None:
+    q = query.lower()
+    for phrases, name in _MACHINE_DISPLAY:
+        if any(p in q for p in phrases):
+            return name
+    return None
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(dotenv_path=PROJECT_ROOT / ".env", override=True)
 
@@ -155,6 +171,30 @@ def api_feedback(
     return entry
 
 
+class ConversationRatingRequest(BaseModel):
+    rating: int
+    comment: Optional[str] = None
+
+
+@app.post("/api/conversations/{conversation_id}/rating")
+def api_conversation_rating(conversation_id: int, body: ConversationRatingRequest):
+    if not (1 <= body.rating <= 5):
+        raise HTTPException(status_code=400, detail="rating must be 1-5")
+    db.update_conversation_rating(conversation_id, body.rating, body.comment)
+    comment = (body.comment or "").strip()
+    if comment:
+        conv = db.get_conversation(conversation_id)
+        if conv:
+            rag.record_field_note(
+                question=conv["question"],
+                answer=conv["answer"],
+                comment=comment,
+                source_id=conversation_id,
+                source_type="ask_conversation",
+            )
+    return {"ok": True}
+
+
 @app.post("/api/ingest")
 async def api_ingest(file: UploadFile = File(...)):
     ext = Path(file.filename).suffix.lower()
@@ -246,11 +286,29 @@ def api_diagnose_start(question: str = Form(...)):
 
     result = rag.diagnose_step(question, history=[], questions_asked=0, session=fsm)
 
+    machine = _detect_machine(question)
+    doc_ids = [s["id"] for s in result.get("sources", [])]
+    db_history = [{"role": "assistant", "text": result["message"], "doc_ids": doc_ids, "step": 1}]
+
     _diag_sessions[session_id] = {
         "question": question,
+        "machine": machine,
         "history": [{"role": "assistant", "content": result["message"]}],
+        "db_history": db_history,
+        "all_doc_ids": list(doc_ids),
         "fsm": fsm,
     }
+
+    db.upsert_diagnose_session(
+        session_id=session_id,
+        question=question,
+        machine=machine,
+        history=db_history,
+        retrieved_doc_ids=doc_ids,
+        is_resolved=result["is_resolved"],
+        final_resolution=result["resolution"].get("likely_cause") if result.get("resolution") else None,
+        confidence=result["resolution"].get("confidence_level") if result.get("resolution") else None,
+    )
 
     return {
         **result,
@@ -288,14 +346,78 @@ def api_diagnose_continue(
     # Advance FSM state based on the last assistant prompt and the user answer.
     diagnosis_fsm.advance_state(fsm, last_assistant_message, answer)
 
+    db_history = session.get("db_history", [])
+    db_history.append({"role": "user", "text": answer, "step": len(db_history) + 1})
+
     history.append({"role": "user", "content": answer})
     result = rag.diagnose_step(question, history, questions_asked=questions_asked, session=fsm)
+
+    doc_ids = [s["id"] for s in result.get("sources", [])]
+    all_doc_ids: list[int] = session.get("all_doc_ids", [])
+    all_doc_ids = list(dict.fromkeys(all_doc_ids + doc_ids))
+
     if not result["is_resolved"]:
         history.append({"role": "assistant", "content": result["message"]})
+
+    step = sum(1 for m in history if m["role"] == "assistant")
+    db_history.append({"role": "assistant", "text": result["message"], "doc_ids": doc_ids, "step": step})
+
     session["history"] = history
+    session["db_history"] = db_history
+    session["all_doc_ids"] = all_doc_ids
     session["fsm"] = fsm
-    step = sum(1 for m in session["history"] if m["role"] == "assistant")
+
+    db.upsert_diagnose_session(
+        session_id=session_id,
+        question=question,
+        machine=session.get("machine"),
+        history=db_history,
+        retrieved_doc_ids=all_doc_ids,
+        is_resolved=result["is_resolved"],
+        final_resolution=result["resolution"].get("likely_cause") if result.get("resolution") else None,
+        confidence=result["resolution"].get("confidence_level") if result.get("resolution") else None,
+    )
+
     return {**result, "session_id": session_id, "step": step}
+
+
+@app.get("/api/diagnose/sessions")
+def api_diagnose_sessions():
+    return {"sessions": db.list_diagnose_sessions()}
+
+
+@app.get("/api/diagnose/sessions/{session_id}")
+def api_diagnose_session(session_id: str):
+    s = db.get_diagnose_session(session_id)
+    if s is None:
+        raise HTTPException(status_code=404, detail="session not found")
+    return s
+
+
+@app.post("/api/diagnose/sessions/{session_id}/feedback")
+def api_diagnose_session_feedback(
+    session_id: str,
+    rating: int = Form(...),
+    comment: Optional[str] = Form(None),
+):
+    if not 1 <= rating <= 5:
+        raise HTTPException(status_code=400, detail="rating must be 1-5")
+    clean_comment = (comment or "").strip() or None
+    ok = db.update_diagnose_feedback(session_id, rating, clean_comment)
+    if not ok:
+        raise HTTPException(status_code=404, detail="session not found")
+    if clean_comment:
+        s = db.get_diagnose_session(session_id)
+        if s and s.get("final_resolution"):
+            rag.record_field_note(
+                question=s["question"],
+                answer=s["final_resolution"],
+                comment=clean_comment,
+                source_id=session_id,
+                source_type="diagnose_session",
+                machine=s.get("machine"),
+            )
+    return {"ok": True}
 
 
 # --- SPA static serving ---

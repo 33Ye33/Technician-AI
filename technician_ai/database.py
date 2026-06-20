@@ -52,8 +52,37 @@ def init_db() -> None:
                 status TEXT,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
+
+            CREATE TABLE IF NOT EXISTS diagnose_sessions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT UNIQUE NOT NULL,
+                machine TEXT,
+                question TEXT NOT NULL,
+                history_json TEXT NOT NULL DEFAULT '[]',
+                retrieved_doc_ids_json TEXT NOT NULL DEFAULT '[]',
+                final_resolution TEXT,
+                confidence TEXT,
+                rating INTEGER,
+                feedback_comment TEXT,
+                is_resolved INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
             """
         )
+        # Migrate existing installs: add new columns if missing
+        for col, definition in [
+            ("rating", "INTEGER"),
+            ("feedback_comment", "TEXT"),
+        ]:
+            try:
+                conn.execute(f"ALTER TABLE diagnose_sessions ADD COLUMN {col} {definition}")
+            except Exception:
+                pass
+            try:
+                conn.execute(f"ALTER TABLE conversations ADD COLUMN {col} {definition}")
+            except Exception:
+                pass
         conn.commit()
 
         columns = {row[1] for row in conn.execute("PRAGMA table_info(conversations)")}
@@ -168,11 +197,38 @@ def list_all_documents(limit: int = 20) -> list[dict]:
         conn.close()
 
 
+# Maps phrases a technician might say → substrings that must appear in manual_title.
+# Checked case-insensitively against the query. First match wins.
+_MACHINE_TITLE_FILTERS: list[tuple[tuple[str, ...], tuple[str, ...]]] = [
+    (("glass loading",),                          ("glass loading",)),
+    (("edge trimming",),                          ("edge trimming",)),
+    (("corner wrapping",),                        ("corner wrapping",)),
+    (("busbar tab lifting", "busbar lifting", "tab lifting", "busbar leads lifting"),
+                                                  ("busbar tab lifting", "ILM-T-PostLam-WI-54068")),
+    (("busbar soldering",),                       ("busbar soldering",)),
+    (("all in one soldering", "all-in-one soldering", "soldering stringer", "04_01"),
+                                                  ("all in one soldering", "04_01")),
+    (("junction box soldering",),                 ("junction box soldering",)),
+]
+
+
+def _detect_manual_filter(query: str) -> tuple[str, ...] | None:
+    """Return title substrings to filter on if a machine name is found in the query."""
+    q = query.lower()
+    for phrases, title_substrings in _MACHINE_TITLE_FILTERS:
+        if any(p in q for p in phrases):
+            return title_substrings
+    return None
+
+
 def search_by_keywords(query: str, k: int = 6) -> list[dict]:
     """Keyword-based fallback retrieval when embeddings are disabled.
 
     Scores each document by how many unique query terms appear in its text,
     then returns the top-k by score. Falls back to most-recent if no matches.
+
+    When the query mentions a specific machine name, retrieval is first scoped
+    to that machine's manual chunks to avoid cross-manual contamination.
     """
     _STOPWORDS = {
         "a", "an", "the", "is", "are", "was", "were", "be", "been", "being",
@@ -193,6 +249,19 @@ def search_by_keywords(query: str, k: int = 6) -> list[dict]:
         ).fetchall()
     finally:
         conn.close()
+
+    # Scope to a specific machine's manual when the query names one.
+    title_filter = _detect_manual_filter(query)
+    if title_filter:
+        scoped = []
+        for r in rows:
+            meta = json.loads(r["metadata_json"])
+            title = meta.get("manual_title", "").lower()
+            if any(f in title for f in title_filter) or r["kind"] != "manual_chunk":
+                scoped.append(r)
+        # Only use scoped rows if they contain actual content; otherwise fall back.
+        if scoped:
+            rows = scoped
 
     scored = []
     for r in rows:
@@ -274,6 +343,19 @@ def get_conversation(conversation_id: int) -> dict | None:
             "status": row["status"],
             "feedback_note": row["feedback_note"],
         }
+    finally:
+        conn.close()
+
+
+def update_conversation_rating(conversation_id: int, rating: int, comment: str | None = None) -> bool:
+    conn = connect()
+    try:
+        cur = conn.execute(
+            "UPDATE conversations SET rating = ?, feedback_comment = ? WHERE id = ?",
+            (rating, comment, conversation_id),
+        )
+        conn.commit()
+        return cur.rowcount > 0
     finally:
         conn.close()
 
@@ -390,6 +472,121 @@ def delete_manual(title: str) -> int:
             )
             conn.commit()
         return len(ids)
+    finally:
+        conn.close()
+
+
+def upsert_diagnose_session(
+    session_id: str,
+    question: str,
+    machine: str | None,
+    history: list[dict],
+    retrieved_doc_ids: list[int],
+    is_resolved: bool,
+    final_resolution: str | None = None,
+    confidence: str | None = None,
+) -> None:
+    conn = connect()
+    try:
+        conn.execute(
+            """
+            INSERT INTO diagnose_sessions
+                (session_id, machine, question, history_json, retrieved_doc_ids_json,
+                 is_resolved, final_resolution, confidence, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(session_id) DO UPDATE SET
+                history_json = excluded.history_json,
+                retrieved_doc_ids_json = excluded.retrieved_doc_ids_json,
+                is_resolved = excluded.is_resolved,
+                final_resolution = excluded.final_resolution,
+                confidence = excluded.confidence,
+                updated_at = CURRENT_TIMESTAMP
+            """,
+            (
+                session_id, machine, question,
+                json.dumps(history, ensure_ascii=False),
+                json.dumps(retrieved_doc_ids),
+                int(is_resolved), final_resolution, confidence,
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def list_diagnose_sessions(limit: int = 200) -> list[dict]:
+    conn = connect()
+    try:
+        rows = conn.execute(
+            """
+            SELECT session_id, machine, question, is_resolved, final_resolution,
+                   confidence, rating, feedback_comment, created_at, updated_at,
+                   (SELECT COUNT(*) FROM json_each(history_json)) AS turn_count
+            FROM diagnose_sessions
+            ORDER BY updated_at DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+        return [
+            {
+                "session_id": r["session_id"],
+                "machine": r["machine"],
+                "question": r["question"],
+                "is_resolved": bool(r["is_resolved"]),
+                "final_resolution": r["final_resolution"],
+                "confidence": r["confidence"],
+                "rating": r["rating"],
+                "feedback_comment": r["feedback_comment"],
+                "turn_count": r["turn_count"],
+                "created_at": r["created_at"],
+                "updated_at": r["updated_at"],
+            }
+            for r in rows
+        ]
+    finally:
+        conn.close()
+
+
+def get_diagnose_session(session_id: str) -> dict | None:
+    conn = connect()
+    try:
+        row = conn.execute(
+            """
+            SELECT session_id, machine, question, history_json, retrieved_doc_ids_json,
+                   is_resolved, final_resolution, confidence, feedback, created_at, updated_at
+            FROM diagnose_sessions WHERE session_id = ?
+            """,
+            (session_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return {
+            "session_id": row["session_id"],
+            "machine": row["machine"],
+            "question": row["question"],
+            "history": json.loads(row["history_json"]),
+            "retrieved_doc_ids": json.loads(row["retrieved_doc_ids_json"]),
+            "is_resolved": bool(row["is_resolved"]),
+            "final_resolution": row["final_resolution"],
+            "confidence": row["confidence"],
+            "feedback": row["feedback"],
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+        }
+    finally:
+        conn.close()
+
+
+def update_diagnose_feedback(session_id: str, rating: int, comment: str | None = None) -> bool:
+    conn = connect()
+    try:
+        cur = conn.execute(
+            "UPDATE diagnose_sessions SET rating = ?, feedback_comment = ?, updated_at = CURRENT_TIMESTAMP WHERE session_id = ?",
+            (rating, comment, session_id),
+        )
+        conn.commit()
+        return cur.rowcount > 0
     finally:
         conn.close()
 
