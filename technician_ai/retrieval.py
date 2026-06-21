@@ -42,12 +42,28 @@ _LANGUAGE_DIRECTIVE_TEMPLATE = """REPLY LANGUAGE:
 
 
 def _detect_language(text: str) -> str:
-    """Best-effort language detection from the text content."""
-    if any("一" <= c <= "鿿" for c in text):
-        return "Chinese (中文)"
-    if any(c in text.lower() for c in ["á", "é", "í", "ó", "ú", "ü", "ñ", "¿", "¡"]):
-        return "Spanish (Español)"
-    return "English"
+    """Detect script/language from Unicode block heuristics.
+    For non-Latin scripts we can be specific; for Latin-script languages
+    we pass the sample text and let the model infer."""
+    for ch in text:
+        o = ord(ch)
+        if 0x4E00 <= o <= 0x9FFF or 0x3400 <= o <= 0x4DBF:
+            return "Chinese (中文)"
+        if 0x3040 <= o <= 0x309F or 0x30A0 <= o <= 0x30FF:
+            return "Japanese (日本語)"
+        if 0xAC00 <= o <= 0xD7AF or 0x1100 <= o <= 0x11FF:
+            return "Korean (한국어)"
+        if 0x0600 <= o <= 0x06FF or 0x0750 <= o <= 0x077F:
+            return "Arabic (العربية)"
+        if 0x0400 <= o <= 0x04FF:
+            return "Russian (Русский)"
+        if 0x0900 <= o <= 0x097F:
+            return "Hindi (हिन्दी)"
+        if 0x0E00 <= o <= 0x0E7F:
+            return "Thai (ภาษาไทย)"
+    # Latin-script languages: let the model infer from the actual text
+    sample = text[:60].replace("\n", " ")
+    return f"the same language as this text: \"{sample}\""
 
 
 def _render_language_directive() -> str:
