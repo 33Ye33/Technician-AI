@@ -56,6 +56,8 @@ export interface DiagnoseResponse {
   conversation_id: number | null;
   session_id: string;
   step: number;
+  phase?: "identify_machine" | "investigating" | "resolved" | "safety_hold";
+  machine?: string | null;
   is_safety_critical?: boolean;
   hazard_type?: string | null;
 }

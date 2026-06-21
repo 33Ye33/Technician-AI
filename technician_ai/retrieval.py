@@ -63,9 +63,9 @@ Rules:
 4. Be concise. Lead with the answer. Add the why or the steps only if it materially helps.
 5. Never invent part numbers, torque specs, or measurements. If a precise value is needed and not in the sources, say so."""
 
-DIAGNOSE_SYSTEM_PROMPT = """You are Technician AI running a guided, multi-turn fault diagnosis.
+DIAGNOSE_SYSTEM_PROMPT = """You are Technician AI, an agent that guides a technician through fault diagnosis on factory equipment, one step at a time.
 
-The first user message contains source snippets from service manuals and field knowledge, the problem description, and a progress note showing how many questions have already been asked.
+The user message contains: retrieved source snippets (manuals + field knowledge), the list of known machines, the machine identified so far (or "unknown"), the original problem, and the conversation so far. You reason over the whole conversation as your memory each turn. You MUST reply with a single JSON object matching the provided schema and nothing else.
 
 SAFETY-CRITICAL DETECTION (evaluate before anything else):
 Before applying any turn-by-turn rules, determine whether the reported problem involves an immediate hazard:
@@ -101,15 +101,19 @@ For broken glass specifically (and ONLY for broken glass — do not apply these 
 
 For pneumatic movement incidents (and ONLY for pneumatic incidents): do NOT include broken-glass cleanup instructions, PPE-for-cleanup instructions, or door-closure instructions. These are hazard-specific to broken glass only.
 
-Turn-by-turn rules:
-0. ESCALATION CHECK (before anything else, non-safety-critical): Before asking any diagnostic question, scan the retrieved sources for explicit escalation instructions — phrases like "report to team lead", "notify supervisor", "stop production", "contact maintenance", "do not continue", or "ask for equipment assistance". If the reported problem matches the condition described in such an instruction, output the escalation directive FIRST and do NOT begin a diagnostic investigation. Example: if a source says "report to team lead if multiple [X] occur in a row" and the technician reports multiple [X] in a row, tell them to report to team lead immediately before asking anything else.
-1. FIRST turn only (non-safety-critical): Read the problem and sources. Identify the 2-3 most plausible root causes. Ask ONE targeted, observable yes/no or short-answer question the technician can answer by inspecting the machine right now. Do NOT list the causes yet. Do NOT give repair steps. IMPORTANT: If the problem description uses words like "always", "every time", "exactly", "consistent", or "same every time", skip random/physical causes (debris, slippage, cart misalignment) and ask first about recent maintenance, setting changes, or HMI calibration values — consistent symptoms point to systematic causes, not random ones.
-2. FOLLOW-UP turns: Internally update your working hypothesis. Do NOT output a summary of findings, a working hypothesis block, or intermediate confidence ratings — just ask ONE new question that either confirms the leading cause or rules it out. Vary the type of check (visual, audible, measurement) to build a fuller picture.
-3. KEEP ASKING: Do NOT resolve until you have at least one CONFIRMED observation that directly explains the symptom. If all evidence so far is approximate, suspected, or hearsay, ask one more targeted question. Only stop when the root cause is confirmed — not based on how many questions have been asked. The only exception is an immediately safety-critical situation.
-4. RESOLUTION: Only when you have at least one CONFIRMED observation, begin your response with exactly "RESOLVED:" on its own line, then immediately use the exact section labels defined in RESOLUTION OUTPUT STRUCTURE below — do not use markdown headers (##), emojis, or any other format.
-5. Cite sources inline as [#N] in diagnostic questions too — note which source supports your hypothesis.
-6. Never ask more than 6 questions total before resolving regardless of outcome.
-7. One question per turn. Be concise. No preamble or filler.
+OUTPUT: Reply with a single JSON object matching the provided schema and nothing else. If you must issue the SAFETY ALERT described above, do it inside the JSON: set "action" to "ask" and put the alert text (hazard line + required immediate actions + the safety-verification question) in "message".
+
+MACHINE FIRST: You are given the list of known machines. If the conversation does not clearly indicate which one the technician is on, your first action is "ask": briefly ask them to confirm which machine and list the known options. Keep "identified_machine" null until it is clear; then set it to the EXACT name from the list and proceed. Do not ask about the machine again once it is known.
+
+REASON THEN DECIDE (every turn): Use "reasoning" to privately reassess the evidence so far and your leading hypothesis (not shown to the technician), then choose "action": "ask" one more question, or "resolve". There is NO minimum or maximum number of questions — decide based on the evidence, never on how many questions have been asked.
+
+Turn rules:
+0. ESCALATION CHECK (non-safety-critical): scan the retrieved sources for explicit escalation instructions — phrases like "report to team lead", "notify supervisor", "stop production", "contact maintenance", "do not continue", or "ask for equipment assistance". If the reported problem matches such an instruction, resolve immediately with that escalation directive instead of investigating.
+1. Once the machine is known, identify the 2-3 most plausible root causes from the problem and sources, and ask ONE targeted, observable question the technician can answer by inspecting the machine right now. Do NOT list the causes; do NOT give repair steps yet. If the symptom is described as consistent ("always", "every time", "exactly", "same every time"), prioritise systematic causes (recent maintenance, setting/parameter changes, HMI calibration) over random ones (debris, slippage, misalignment).
+2. FOLLOW-UP turns: ask ONE new question that confirms or rules out the leading cause. Vary the type of check (visual, audible, measurement) to build a fuller picture.
+3. KEEP ASKING until you have at least one CONFIRMED observation that directly explains the symptom. If all evidence is approximate, suspected, or hearsay, ask one more targeted question instead of resolving.
+4. Cite the source supporting your hypothesis inline as [#N] in your questions.
+5. One question per turn. Be concise. No preamble or filler.
 
 Evidence rules (apply at every turn):
 8. A measured or observed condition that falls outside the source-defined operating standard may be stated as the blocking condition with high confidence. Do NOT elevate this to a specific component failure without direct evidence.
@@ -133,94 +137,74 @@ Classify each technician observation as one of:
 - NEGATIVE: a condition explicitly ruled out.
   Examples: "No active alarm", "No visible cracks", "No one is injured"
 
-Uncertainty language markers (when present, classify as APPROXIMATE or SUSPECTED, not CONFIRMED):
-maybe / might / I think / I'm not sure / not really sure / hard to tell / looked like /
-probably / roughly / around / about / kind of / sort of / someone said / I wasn't watching /
-I didn't check / not 100% / I guess / unclear / can't tell / I didn't really / seems like /
-could be / may be / I believe.
+RESOLVING (action = "resolve"): resolve only when at least one CONFIRMED observation directly explains the symptom. If all evidence is APPROXIMATE, SUSPECTED, or HEARSAY, ask one more targeted question that can yield a confirmed reading instead of resolving. Fill every field of the "resolution" object:
+- likely_cause: the specific component or condition confirmed as the root cause, in one sentence.
+- next_steps: ordered actions. Only recommend a repair/replacement a retrieved source authorizes for a line technician; otherwise write "Have qualified maintenance inspect/replace [part] using the approved procedure." Cite sources [#N].
+- confirmed_condition: the specific observation(s) that confirmed the cause, with citation [#N]. State numeric comparisons explicitly (e.g. "-65 kPa is weaker than the required -70 kPa range"), not a vague "below range". Do NOT name a specific component as the cause unless the technician confirmed observable evidence of its failure or a source explicitly links the symptom to it.
+- confidence_level: "high" ONLY when a CONFIRMED observation directly explains the symptom — a measurement outside a source-defined standard, a clearly visible defect, a documented alarm code together with a confirmed physical cause behind it, or two independent confirmed observations. Otherwise use "medium" or "low".
+- confidence_justification: one sentence; when confidence is not high, name the alternative causes still open.
 
-RESOLUTION THRESHOLD — non-safety scenarios:
-Do NOT resolve with HIGH confidence unless at least one of the following is true:
-1. A CONFIRMED, stated measurement is outside a source-defined operating standard and directly explains the symptom.
-2. A CONFIRMED, clearly visible physical defect directly explains the symptom (no hedging from technician).
-3. A documented alarm code AND a CONFIRMED physical field observation both converge on the same root cause. The alarm code alone is not sufficient — the physical cause behind the alarm must be confirmed by the technician.
-4. Two independent CONFIRMED observations independently support the same root cause.
+For intermittent or multi-symptom problems, do not force a single root cause prematurely — keep alternatives open and recommend targeted verification rather than immediate replacement.
 
-When all available evidence is APPROXIMATE, SUSPECTED, or HEARSAY:
-- Do NOT resolve with HIGH confidence.
-- Use MEDIUM or LOW confidence.
-- Preserve alternative explanations not yet ruled out.
-- Either ask one more targeted confirmation question, or output a working hypothesis with LOW/MEDIUM confidence.
+ESCALATION: when you cannot reach a confirmed root cause, or you are told the session has run long, resolve with an escalation recommendation — confidence_level "low" or "medium", confirmed_condition stating what is and isn't established, and next_steps directing the technician to escalate to qualified maintenance or a supervisor with the evidence gathered so far."""
 
-RESOLUTION OUTPUT STRUCTURE — use these exact section labels, in this exact order:
-
-If CONFIRMED evidence supports the conclusion, output exactly:
-  RESOLVED:
-
-  Likely cause:
-  [Specific component or condition confirmed as the root cause. One sentence, plain English.]
-
-  Next steps:
-  1. [First action — source-supported]
-  2. [Second action — source-supported]
-  3. [If repair not covered by sources: "Escalate to qualified maintenance personnel"]
-
-  Confirmed condition:
-  [The specific observation(s) that confirmed the root cause, with source citation [#N].]
-
-  Confidence: High
-  [One sentence justification.]
-
-  Sources: [#N], [#N]
-
-Use "Confidence: High", "Confidence: Medium", or "Confidence: Low" on ONE line — value immediately after the colon.
-Do NOT use markdown headers (##), emojis, bold labels, or bullet dashes for section labels.
-
-If evidence is APPROXIMATE, SUSPECTED, or mixed:
-  Do NOT output RESOLVED. Ask ONE more targeted question to obtain a CONFIRMED observation.
-
-INTERMITTENT / MULTI-SYMPTOM BEHAVIOR:
-When a symptom is intermittent (sometimes works, sometimes does not) or involves multiple overlapping symptoms with no active alarm:
-- Do not force a single root cause prematurely.
-- Identify the most useful next evidence to collect.
-- Compare measurements against documented standards only when the reading is CONFIRMED.
-- Keep alternative contributors open until actively ruled out by confirmed evidence.
-- Recommend targeted verification rather than immediate replacement or repair.
-
-CONSISTENT / REPEATABLE SYMPTOMS:
-When the technician describes a symptom using words like "always", "every time", "exactly", "consistent", "same every time", "never changes", or similar — treat this as a strong signal of a SYSTEMATIC root cause (calibration drift, parameter offset, coordinate reference error, worn component with fixed geometry, software setting change).
-- De-prioritize random or environmental causes (debris, dust, slippage, vibration) in your first questions — these produce variable symptoms, not perfectly repeatable ones.
-- Within 2 questions, focus on: Has anything been adjusted or serviced recently? Do HMI parameters or calibration values match their expected settings?
-- Do NOT spend multiple turns ruling out physical random causes when the symptom is described as perfectly consistent.
-
-DO NOT label an issue as "Blocking condition" unless it is supported by a CONFIRMED observation or a CONFIRMED measurement against a source-defined standard."""
+# Structured per-turn decision the diagnosis agent must return.
+DIAGNOSE_DECISION_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "identified_machine": {"type": ["string", "null"]},
+        "reasoning": {"type": "string"},
+        "action": {"type": "string", "enum": ["ask", "resolve"]},
+        "message": {"type": "string"},
+        "resolution": {
+            "type": ["object", "null"],
+            "additionalProperties": False,
+            "properties": {
+                "likely_cause": {"type": "string"},
+                "next_steps": {"type": "array", "items": {"type": "string"}},
+                "confirmed_condition": {"type": "string"},
+                "confidence_level": {"type": "string", "enum": ["high", "medium", "low"]},
+                "confidence_justification": {"type": "string"},
+            },
+            "required": [
+                "likely_cause", "next_steps", "confirmed_condition",
+                "confidence_level", "confidence_justification",
+            ],
+        },
+    },
+    "required": ["identified_machine", "reasoning", "action", "message", "resolution"],
+}
 
 # Append the reply-language directive so every answer/diagnosis turn honors it.
 ANSWER_SYSTEM_PROMPT = ANSWER_SYSTEM_PROMPT + "\n\n" + LANGUAGE_DIRECTIVE
 DIAGNOSE_SYSTEM_PROMPT = DIAGNOSE_SYSTEM_PROMPT + "\n\n" + LANGUAGE_DIRECTIVE
 
-_HIGH_CONFIDENCE_RE = re.compile(r"Confidence:\s*High", re.IGNORECASE)
 
-
-def _enforce_evidence_quality(response: str, session: dict | None) -> str:
-    """Downgrade unwarranted HIGH confidence claims in RESOLVED responses.
-
-    If the LLM emits 'Confidence: High' but the FSM session has no CONFIRMED
-    observations, downgrade to Medium and append an advisory note.
-    This is a safety net — the prompt instructions should prevent this in most
-    cases, but the code-level check catches any slip-through.
+def _downgrade_unwarranted_confidence(resolution: dict, session: dict | None) -> dict:
+    """Backstop: drop HIGH confidence to medium when the logged observations are
+    all uncertain. Only fires when there ARE substantive per-turn observations to
+    judge — on a direct first-turn resolve (no replies logged yet) we trust the
+    agent, which reasoned over the full problem description itself.
     """
-    if not _HIGH_CONFIDENCE_RE.search(response):
-        return response
-    if session is None or diagnosis_fsm.high_confidence_warranted(session):
-        return response
-    downgraded = _HIGH_CONFIDENCE_RE.sub("Confidence: Medium", response)
-    downgraded += (
-        "\n\n_Note: Confidence adjusted to Medium — observations were approximate "
-        "or uncertain. A targeted confirmation step is recommended before initiating "
-        "any repair or replacement._"
-    )
-    return downgraded
+    if session is not None:
+        substantive = [e for e in session.get("evidence_log", []) if e != "NEGATIVE"]
+    else:
+        substantive = []
+    if (
+        resolution.get("confidence_level") == "high"
+        and session is not None
+        and substantive
+        and not diagnosis_fsm.high_confidence_warranted(session)
+    ):
+        resolution["confidence_level"] = "medium"
+        note = (
+            "Confidence adjusted to medium — observations were approximate or uncertain; "
+            "confirm with a direct measurement before any repair."
+        )
+        just = (resolution.get("confidence_justification") or "").strip()
+        resolution["confidence_justification"] = f"{just} {note}".strip()
+    return resolution
 
 
 STRUCTURE_SYSTEM_PROMPT = """You convert a technician's correction or new finding into a clean knowledge-base entry.
@@ -298,78 +282,6 @@ _GROUNDING_NOTE = (
     "\n\n_Note: No source document was retrieved supporting this repair procedure. "
     "Escalate to qualified maintenance personnel._"
 )
-
-
-def _parse_resolution(message: str) -> dict:
-    """Extract structured fields from a RESOLVED message.
-
-    Uses position-based slicing: finds each section label in the text,
-    then extracts the content block between that label and the next one.
-    Works whether the content is on the same line or the next line.
-    Handles both new plain-label format and old ## markdown-header format.
-    """
-
-    label_patterns: dict[str, list[str]] = {
-        "likely_cause":       [r"^Likely cause:",          r"^##[^\n]*Root Cause"],
-        "next_steps":         [r"^Next steps?:",            r"^##[^\n]*Next Steps?"],
-        "confirmed_condition":[r"^Confirmed condition:",    r"^##[^\n]*Issue Identified"],
-        "confidence":         [r"^Confidence:",             r"\*\*Confidence:\*\*"],
-        "sources":            [r"^Sources:"],
-    }
-
-    # Find the start + end of each label in the text
-    positions: dict[str, tuple[int, int]] = {}
-    for key, patterns in label_patterns.items():
-        for p in patterns:
-            m = re.search(p, message, re.IGNORECASE | re.MULTILINE)
-            if m:
-                positions[key] = (m.start(), m.end())
-                break
-
-    def get_content(key: str) -> str:
-        if key not in positions:
-            return ""
-        _, label_end = positions[key]
-        label_start = positions[key][0]
-        # Next section starts at the minimum start position that is > label_start
-        next_start = len(message)
-        for other_key, (other_start, _) in positions.items():
-            if other_start > label_start:
-                next_start = min(next_start, other_start)
-        raw = message[label_end:next_start].strip()
-        # Strip markdown bold markers
-        return re.sub(r"\*\*([^*]+)\*\*", r"\1", raw).strip()
-
-    likely_cause       = get_content("likely_cause")
-    next_steps_raw     = get_content("next_steps")
-    confirmed_condition= get_content("confirmed_condition")
-    confidence_raw     = get_content("confidence")
-
-    # Parse confidence level + justification
-    confidence_level = "medium"
-    confidence_justification = ""
-    if confidence_raw:
-        cm = re.match(r"(high|medium|low)[^\w]*(.*)", confidence_raw, re.IGNORECASE | re.DOTALL)
-        if cm:
-            confidence_level = cm.group(1).lower()
-            confidence_justification = re.sub(r"^[—–\-\s]+", "", cm.group(2)).strip()
-
-    # Parse next steps into a list
-    next_steps: list[str] = []
-    for line in next_steps_raw.split("\n"):
-        line = re.sub(r"^[\d]+[.)]\s*", "", line.strip())
-        line = re.sub(r"^[-•*]\s*", "", line)
-        if line:
-            next_steps.append(line)
-
-    result = {
-        "likely_cause": likely_cause,
-        "next_steps": next_steps,
-        "confirmed_condition": confirmed_condition,
-        "confidence_level": confidence_level,
-        "confidence_justification": confidence_justification,
-    }
-    return result
 
 
 def grounding_guard(response: str) -> str:
@@ -538,37 +450,54 @@ def record_field_note(
     return {"id": doc_id}
 
 
+def _parse_decision(raw: str) -> dict:
+    """Parse the agent's JSON decision, tolerating stray text around the object."""
+    try:
+        return json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        match = re.search(r"\{[\s\S]*\}", raw or "")
+        if match:
+            try:
+                return json.loads(match.group())
+            except json.JSONDecodeError:
+                pass
+    # Fallback: keep the loop alive by treating the text as a question.
+    return {
+        "action": "ask",
+        "message": (raw or "").strip(),
+        "identified_machine": None,
+        "resolution": None,
+    }
+
+
 def diagnose_step(
     question: str,
     history: list[dict],
     questions_asked: int = 0,
     session: dict | None = None,
+    machine: str | None = None,
+    machine_options: list[str] | None = None,
+    escalate: bool = False,
 ) -> dict:
-    """Run one turn of the guided fault-diagnosis FSM.
+    """Run one turn of the guided fault-diagnosis agent.
+
+    The deterministic safety gate runs first (unchanged). Once safety is clear,
+    the LLM agent reasons over the full conversation and returns a structured
+    decision: identify the machine if unclear, ask one more question, or resolve.
+    There is no hardcoded question count — the agent decides when to conclude.
 
     Parameters
     ----------
-    question:
-        The original problem description (never changes across turns).
-    history:
-        Alternating assistant / user messages from all prior turns.
-    questions_asked:
-        Count of assistant turns already completed (used when *session* is None).
-    session:
-        Optional FSM session dict managed by the caller (app.py's
-        _diag_sessions).  When provided, the safety gate and FSM state machine
-        are fully active.  When None the function degrades gracefully to the
-        original behaviour (backward-compatible).
+    question:        original problem description (never changes across turns).
+    history:         alternating assistant / user messages from prior turns.
+    questions_asked: assistant turns so far (kept for backward compatibility).
+    session:         FSM session dict (safety state + evidence-quality memory).
+    machine:         machine confirmed so far, or None.
+    machine_options: known machine names offered when the machine is unclear.
+    escalate:        when True, nudge the agent to conclude with an escalation.
 
-    Returns
-    -------
-    dict with keys:
-        message           : str   — assistant text to display
-        is_resolved       : bool
-        is_safety_critical: bool  — True if a safety alert was issued this turn
-        hazard_type       : str | None
-        sources           : list  — populated on RESOLVED turns only
-        conversation_id   : int | None
+    Returns a dict with: message, is_resolved, resolution, phase, machine,
+    identified_machine, is_safety_critical, hazard_type, sources, conversation_id.
     """
     # ------------------------------------------------------------------
     # 1. Safety gate — deterministic pre-flight check on the first turn.
@@ -599,6 +528,10 @@ def diagnose_step(
             return {
                 "message": safety_response,
                 "is_resolved": False,
+                "resolution": None,
+                "phase": "safety_hold",
+                "machine": machine,
+                "identified_machine": None,
                 "is_safety_critical": True,
                 "hazard_type": hazard_type,
                 "sources": [],
@@ -641,6 +574,10 @@ def diagnose_step(
                 return {
                     "message": safety_gate.build_safety_hold_response(hazard, unmet),
                     "is_resolved": False,
+                    "resolution": None,
+                    "phase": "safety_hold",
+                    "machine": machine,
+                    "identified_machine": None,
                     "is_safety_critical": True,
                     "hazard_type": hazard,
                     "sources": [],
@@ -648,18 +585,22 @@ def diagnose_step(
                 }
 
     # ------------------------------------------------------------------
-    # 2. Retrieval — unchanged from original logic.
+    # 2. Retrieval — scope to the confirmed machine's manual when known.
     # ------------------------------------------------------------------
+    retrieval_query = f"{machine} {question}" if machine else question
     if EMBEDDINGS_ENABLED:
-        query_vec = embed_query(question)
-        snippets = db.search_similar(query_vec, k=TOP_K)
+        snippets = db.search_similar(embed_query(retrieval_query), k=TOP_K)
     else:
-        snippets = db.search_by_keywords(question, k=TOP_K)
+        snippets = db.search_by_keywords(retrieval_query, k=TOP_K)
 
     if not snippets:
         return {
             "message": "No manuals or field notes found. Ingest a manual first.",
             "is_resolved": False,
+            "resolution": None,
+            "phase": "investigating",
+            "machine": machine,
+            "identified_machine": None,
             "is_safety_critical": False,
             "hazard_type": None,
             "sources": [],
@@ -667,132 +608,117 @@ def diagnose_step(
         }
 
     # ------------------------------------------------------------------
-    # 3. Build system prompt, optionally enriched with FSM state context.
+    # 3. System prompt + safety/evidence notes (no counts) + escalation nudge.
     # ------------------------------------------------------------------
     system_prompt = DIAGNOSE_SYSTEM_PROMPT
     if session is not None:
         fsm_addition = diagnosis_fsm.get_state_prompt_addition(session)
         if fsm_addition:
-            system_prompt = system_prompt + fsm_addition
+            system_prompt += "\n\n" + fsm_addition
+    if escalate:
+        system_prompt += (
+            "\n\n[ESCALATION] This session has run long without a confirmed root "
+            "cause. Prefer to resolve now with an escalation recommendation rather "
+            "than asking further questions."
+        )
 
     # ------------------------------------------------------------------
-    # 4. Assemble conversation and call the LLM.
+    # 4. Assemble the conversation and request a structured decision.
     # ------------------------------------------------------------------
     sources_block = _format_sources(snippets)
-    qa_count = (
-        session["questions_asked"]
-        if session is not None and "questions_asked" in session
-        else questions_asked
-    )
-    evidence_note = ""
-    if session is not None:
-        ev_log = session.get("evidence_log", [])
-        if ev_log:
-            counts = {q: ev_log.count(q) for q in ("CONFIRMED", "APPROXIMATE", "SUSPECTED", "HEARSAY", "NEGATIVE") if ev_log.count(q)}
-            ev_summary = ", ".join(f"{v} {k}" for k, v in counts.items())
-            warranted = diagnosis_fsm.high_confidence_warranted(session)
-            evidence_note = (
-                f" Evidence quality this session: {ev_summary}. "
-                + ("HIGH confidence warranted." if warranted
-                   else "HIGH confidence NOT warranted — all observations approximate or uncertain.")
-            )
-    context_note = (
-        f"\n\n[Diagnostic progress: {qa_count} question(s) asked so far. "
-        f"Resolve only when root cause is CONFIRMED — keep asking if uncertain.{evidence_note}]"
-    )
-    initial_content = (
+    known = ", ".join(machine_options) if machine_options else "(none configured)"
+    convo = "\n".join(
+        f"[{m['role'].upper()}]: {m['content']}" for m in history
+    ) or "(no replies yet)"
+    user_message = (
+        f"Known machines: {known}\n"
+        f"Machine identified so far: {machine or 'unknown'}\n\n"
         f"Sources:\n\n{sources_block}\n\n---\n\n"
-        f"Problem reported: {question}"
-    )
-    system_prompt = system_prompt + context_note
-    messages = [{"role": "user", "content": initial_content}] + history
-    packed = "\n\n".join(
-        f"[{m['role'].upper()}]: {m['content']}" for m in messages
+        f"Problem reported: {question}\n\n"
+        f"Conversation so far:\n{convo}"
     )
     raw = llm_client.chat(
         system=system_prompt,
-        user_message=packed,
+        user_message=user_message,
         model=ANSWER_MODEL,
         max_tokens=1024,
+        json_schema=DIAGNOSE_DECISION_SCHEMA,
         cache_system=True,
     )
 
     # ------------------------------------------------------------------
-    # 5. FSM resolution guard — if the LLM wants to resolve but the FSM
-    #    says it is too early, strip the RESOLVED: prefix and make a second
-    #    call with the block reason injected.
+    # 5. Parse the structured decision.
     # ------------------------------------------------------------------
-    if raw.startswith("RESOLVED:") and session is not None:
-        allowed, block_reason = diagnosis_fsm.check_resolution_allowed(session)
-        if not allowed:
-            # Re-prompt with the block reason appended so the LLM asks
-            # another question instead of resolving prematurely.
-            override_system = system_prompt + f"\n\n[FSM RESOLUTION BLOCKED] {block_reason}"
-            raw = llm_client.chat(
-                system=override_system,
-                user_message=packed,
-                model=ANSWER_MODEL,
-                max_tokens=1024,
-                cache_system=True,
-            )
+    decision = _parse_decision(raw)
+    identified_machine = decision.get("identified_machine")
+    is_resolved = (
+        decision.get("action") == "resolve"
+        and isinstance(decision.get("resolution"), dict)
+    )
 
     # ------------------------------------------------------------------
-    # 6. Parse response.
-    # ------------------------------------------------------------------
-    is_resolved = raw.startswith("RESOLVED:")
-    message = raw[len("RESOLVED:"):].strip() if is_resolved else raw.strip()
-    message = re.sub(r"\[Diagnostic progress:[^\]]*\]\s*", "", message).strip()
-
-    if is_resolved:
-        message = grounding_guard(message)
-        message = _enforce_evidence_quality(message, session)
-
-    # ------------------------------------------------------------------
-    # 7. Advance FSM state when a session is provided.
-    #    The technician's last answer is the final user turn in history.
+    # 6. Advance safety / evidence-quality memory from the latest answer.
     # ------------------------------------------------------------------
     if session is not None and not is_first_turn:
-        # Find the most recent technician reply from history.
-        technician_answer = ""
-        for m in reversed(history):
-            if m["role"] == "user":
-                technician_answer = m["content"]
-                break
+        technician_answer = next(
+            (m["content"] for m in reversed(history) if m["role"] == "user"), ""
+        )
         updated = diagnosis_fsm.advance_state(
             session,
-            llm_response=raw,
+            llm_response=("RESOLVED:" if is_resolved else decision.get("message", "")),
             technician_answer=technician_answer,
         )
-        # Merge updated FSM fields back into the live session in-place.
         for k, v in updated.items():
-            if k not in ("history",):  # history is managed by app.py
+            if k != "history":  # history is owned by the caller
                 session[k] = v
 
+    confirmed_machine = machine or identified_machine
+
     # ------------------------------------------------------------------
-    # 8. Persist conversation on resolution.
+    # 7. Build the turn result.
     # ------------------------------------------------------------------
-    conv_id = None
     if is_resolved:
+        resolution = _downgrade_unwarranted_confidence(dict(decision["resolution"]), session)
         doc_ids = [s["id"] for s in snippets]
-        conv_id = db.insert_conversation(question, message, doc_ids)
+        conv_id = db.insert_conversation(
+            question, resolution.get("likely_cause", ""), doc_ids
+        )
+        return {
+            "message": (decision.get("message") or "").strip(),
+            "is_resolved": True,
+            "resolution": resolution,
+            "phase": "resolved",
+            "machine": confirmed_machine,
+            "identified_machine": identified_machine,
+            "is_safety_critical": False,
+            "hazard_type": None,
+            "sources": [
+                {
+                    "index": i + 1,
+                    "id": s["id"],
+                    "kind": s["kind"],
+                    "metadata": s["metadata"],
+                    "preview": s["text"][:200],
+                }
+                for i, s in enumerate(snippets)
+            ],
+            "conversation_id": conv_id,
+        }
 
-    resolution = _parse_resolution(message) if is_resolved else None
-
+    # action == "ask"
+    phase = "investigating" if confirmed_machine else "identify_machine"
+    message = (decision.get("message") or "").strip() or (
+        "Could you tell me a bit more about what you're seeing?"
+    )
     return {
         "message": message,
-        "is_resolved": is_resolved,
-        "resolution": resolution,
+        "is_resolved": False,
+        "resolution": None,
+        "phase": phase,
+        "machine": confirmed_machine,
+        "identified_machine": identified_machine,
         "is_safety_critical": False,
         "hazard_type": None,
-        "sources": [
-            {
-                "index": i + 1,
-                "id": s["id"],
-                "kind": s["kind"],
-                "metadata": s["metadata"],
-                "preview": s["text"][:200],
-            }
-            for i, s in enumerate(snippets)
-        ] if is_resolved else [],
-        "conversation_id": conv_id,
+        "sources": [],
+        "conversation_id": None,
     }

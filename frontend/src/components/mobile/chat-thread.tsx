@@ -99,14 +99,20 @@ function AskBubble({ msg }: { msg: AskMessage }) {
 function DiagBubble({ msg }: { msg: DiagMessage }) {
   if (msg.role === "user") return <UserBubble text={msg.text} />;
   const { data } = msg;
-  const safety = data.is_safety_critical;
-  const accent = data.is_resolved ? "green" : safety ? "destructive" : "primary";
+  const phase = data.phase ?? (data.is_safety_critical ? "safety_hold" : data.is_resolved ? "resolved" : "investigating");
+  const safety = phase === "safety_hold";
+  const accent = phase === "resolved" ? "green" : safety ? "destructive" : "primary";
+  const label =
+    phase === "safety_hold" ? "Safety Hold"
+      : phase === "resolved" ? "Resolution"
+        : phase === "identify_machine" ? "Identifying machine"
+          : data.machine ? `Investigating · ${data.machine}` : "Investigating";
 
   return (
     <AssistantShell accent={accent}>
       <div className="flex items-center justify-between mb-2">
         <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
-          {safety ? "Safety Hold" : data.is_resolved ? "Resolution" : `Step ${data.step}`}
+          {label}
         </span>
         {data.is_resolved ? (
           <span className="text-[10px] font-mono text-green-400 flex items-center gap-1">
