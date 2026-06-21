@@ -19,6 +19,37 @@ NO_EMBED_MAX_DOCS = 20
 
 EMBEDDINGS_ENABLED = embed_client.EMBEDDINGS_ENABLED
 
+# ---------------------------------------------------------------------------
+# Reply-language template (i18n-style slot).
+#
+# The assistant infers the user's preferred language and replies in it. Add a
+# language by adding one entry to SUPPORTED_LANGUAGES — the directive (the
+# {languages} slot) and the system prompts pick it up automatically.
+# ---------------------------------------------------------------------------
+SUPPORTED_LANGUAGES = {
+    # display name : native name
+    "English": "English",
+    "Spanish": "Español",
+    "Chinese": "中文",
+}
+
+_LANGUAGE_DIRECTIVE_TEMPLATE = """REPLY LANGUAGE:
+- Infer the user's preferred language from THEIR message and write all human-readable prose in that language.
+- Supported reply languages: {languages}. If the user's language is none of these, reply in English.
+- English is a lingua franca: when the user mixes English with another supported language, reply in the OTHER language (e.g. English + 中文 -> reply in 中文; English + Español -> reply in Español). If the message is wholly in one language, reply in that language.
+- Translate ONLY natural-language prose. Keep the following EXACTLY as the other instructions specify them, in English: the `RESOLVED:` prefix; the labels `Likely cause:`, `Next steps:`, `Confirmed condition:`, `Confidence:`; the confidence value `High`/`Medium`/`Low`; the `SAFETY ALERT:` and `Required immediate actions:` labels; citation markers such as [#1]; and all part numbers, identifiers, units, and measurements."""
+
+
+def _render_language_directive() -> str:
+    languages = ", ".join(
+        native if native == name else f"{name} ({native})"
+        for name, native in SUPPORTED_LANGUAGES.items()
+    )
+    return _LANGUAGE_DIRECTIVE_TEMPLATE.format(languages=languages)
+
+
+LANGUAGE_DIRECTIVE = _render_language_directive()
+
 ANSWER_SYSTEM_PROMPT = """You are Technician AI, an assistant for technicians doing construction and parts-assembly work.
 
 You answer questions using the provided source snippets. Two kinds of sources can appear:
@@ -163,6 +194,10 @@ When the technician describes a symptom using words like "always", "every time",
 - Do NOT spend multiple turns ruling out physical random causes when the symptom is described as perfectly consistent.
 
 DO NOT label an issue as "Blocking condition" unless it is supported by a CONFIRMED observation or a CONFIRMED measurement against a source-defined standard."""
+
+# Append the reply-language directive so every answer/diagnosis turn honors it.
+ANSWER_SYSTEM_PROMPT = ANSWER_SYSTEM_PROMPT + "\n\n" + LANGUAGE_DIRECTIVE
+DIAGNOSE_SYSTEM_PROMPT = DIAGNOSE_SYSTEM_PROMPT + "\n\n" + LANGUAGE_DIRECTIVE
 
 _HIGH_CONFIDENCE_RE = re.compile(r"Confidence:\s*High", re.IGNORECASE)
 

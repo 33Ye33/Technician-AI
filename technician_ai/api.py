@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 import uuid
 from contextlib import asynccontextmanager
@@ -9,6 +11,7 @@ from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel
 
 from . import database as db
 from . import diagnosis as diagnosis_fsm
