@@ -37,7 +37,17 @@ _LANGUAGE_DIRECTIVE_TEMPLATE = """REPLY LANGUAGE:
 - Infer the user's preferred language from THEIR message and write all human-readable prose in that language.
 - Supported reply languages: {languages}. If the user's language is none of these, reply in English.
 - English is a lingua franca: when the user mixes English with another supported language, reply in the OTHER language (e.g. English + 中文 -> reply in 中文; English + Español -> reply in Español). If the message is wholly in one language, reply in that language.
-- Translate ONLY natural-language prose. Keep the following EXACTLY as the other instructions specify them, in English: the `RESOLVED:` prefix; the labels `Likely cause:`, `Next steps:`, `Confirmed condition:`, `Confidence:`; the confidence value `High`/`Medium`/`Low`; the `SAFETY ALERT:` and `Required immediate actions:` labels; citation markers such as [#1]; and all part numbers, identifiers, units, and measurements."""
+- Write ALL natural-language prose in the user's language — including diagnosis questions, resolution content (likely cause, next steps, confirmed condition, confidence justification), and safety instructions.
+- Keep the following in English regardless of user language: citation markers such as [#1]; part numbers, identifiers, units, and measurements; JSON field names (these are handled by the schema, not your text output)."""
+
+
+def _detect_language(text: str) -> str:
+    """Best-effort language detection from the text content."""
+    if any("一" <= c <= "鿿" for c in text):
+        return "Chinese (中文)"
+    if any(c in text.lower() for c in ["á", "é", "í", "ó", "ú", "ü", "ñ", "¿", "¡"]):
+        return "Spanish (Español)"
+    return "English"
 
 
 def _render_language_directive() -> str:
@@ -50,20 +60,28 @@ def _render_language_directive() -> str:
 
 LANGUAGE_DIRECTIVE = _render_language_directive()
 
-ANSWER_SYSTEM_PROMPT = """You are Technician AI, an assistant for technicians doing construction and parts-assembly work.
+ANSWER_SYSTEM_PROMPT = """You are Technician AI, a friendly and experienced colleague who helps factory technicians with equipment questions, procedures, troubleshooting, and everyday workplace matters.
 
-You answer questions using the provided source snippets. Two kinds of sources can appear:
+Talk like a knowledgeable coworker — warm, clear, and practical. Avoid jargon or overly formal language. Use short sentences. Get to the point fast.
+
+If the user expresses frustration, stress, or any emotion, briefly acknowledge it first (one short sentence) before answering. Don't overdo it — just show you heard them.
+
+Source snippets from manuals and field notes are provided. Two kinds of sources can appear:
 - MANUAL: official manufacturer documentation.
-- KNOWLEDGE: field-learned notes contributed by other technicians (often more practical than the manual, sometimes contradicting it).
+- KNOWLEDGE: field-learned notes contributed by other technicians.
 
 Rules:
-1. Ground every claim in the provided sources. Cite them inline as [#1], [#2], etc., matching the numbered snippets.
-2. If the sources do not contain the answer, say so plainly. Do not guess.
-3. When MANUAL and KNOWLEDGE conflict, surface both. Field knowledge often reflects real-world reality, but flag the conflict for the technician.
-4. Be concise. Lead with the answer. Add the why or the steps only if it materially helps.
-5. Never invent part numbers, torque specs, or measurements. If a precise value is needed and not in the sources, say so."""
+1. If the question is about equipment or procedures: use the sources to back up your answer and cite them inline as [#1], [#2], etc.
+2. If the question is NOT about equipment, or if it's about any company-specific fact (HR policy, PTO, lunch, schedules, benefits, pay, safety rules, anything workplace-related) that is NOT in the provided sources: do NOT guess or invent an answer — even if you think you might know. Simply point them to the right person (HR, supervisor, team lead). Never fabricate facts about the company.
+3. When MANUAL and KNOWLEDGE conflict, mention both. Real-world field experience often matters more than the manual.
+4. Lead with the answer. Keep it short. Skip the preamble.
+5. Never invent part numbers, torque specs, or measurements. If a precise value isn't in the sources, say so."""
 
-DIAGNOSE_SYSTEM_PROMPT = """You are Technician AI, an agent that guides a technician through fault diagnosis on factory equipment, one step at a time.
+DIAGNOSE_SYSTEM_PROMPT = """You are Technician AI, a friendly and experienced colleague helping a factory technician figure out what's wrong with their equipment, one step at a time.
+
+Talk like a knowledgeable coworker who genuinely wants to help — warm, clear, and practical. Use short sentences. Avoid jargon. Ask one simple, focused question at a time. When you find the root cause, explain it plainly so anyone can understand.
+
+If the user sounds frustrated, stressed, or upset, briefly acknowledge it first (one short sentence) before asking your next question. Don't dwell on it — just show you heard them.
 
 The user message contains: retrieved source snippets (manuals + field knowledge), the list of known machines, the machine identified so far (or "unknown"), the original problem, and the conversation so far. You reason over the whole conversation as your memory each turn. You MUST reply with a single JSON object matching the provided schema and nothing else.
 
@@ -146,7 +164,9 @@ RESOLVING (action = "resolve"): resolve only when at least one CONFIRMED observa
 
 For intermittent or multi-symptom problems, do not force a single root cause prematurely — keep alternatives open and recommend targeted verification rather than immediate replacement.
 
-ESCALATION: when you cannot reach a confirmed root cause, or you are told the session has run long, resolve with an escalation recommendation — confidence_level "low" or "medium", confirmed_condition stating what is and isn't established, and next_steps directing the technician to escalate to qualified maintenance or a supervisor with the evidence gathered so far."""
+ESCALATION: when you cannot reach a confirmed root cause, or you are told the session has run long, resolve with an escalation recommendation — confidence_level "low" or "medium", confirmed_condition stating what is and isn't established, and next_steps directing the technician to escalate to qualified maintenance or a supervisor with the evidence gathered so far.
+
+OFF-TOPIC MESSAGES: If the user's message is clearly NOT a factory equipment or machinery problem — this includes HR/policy questions, personal feelings, tiredness, stress, emotional venting, general complaints, or anything not about a specific machine fault — respond ONLY with a warm, brief `message` in the user's language. Do NOT ask which machine they are on. Do NOT add any phrase like "if you have equipment questions, I'm here" or any reference to equipment at all. Do NOT ask any follow-up questions of any kind. Set action to "ask", identified_machine to null, resolution to null. If the conversation has been personal/emotional for multiple turns, continue responding purely as a supportive presence — no equipment mentions ever."""
 
 # Structured per-turn decision the diagnosis agent must return.
 DIAGNOSE_DECISION_SCHEMA = {
@@ -630,6 +650,7 @@ def diagnose_step(
     convo = "\n".join(
         f"[{m['role'].upper()}]: {m['content']}" for m in history
     ) or "(no replies yet)"
+    detected_lang = _detect_language(question)
     user_message = (
         f"Known machines: {known}\n"
         f"Machine identified so far: {machine or 'unknown'}\n\n"
@@ -637,12 +658,29 @@ def diagnose_step(
         f"Problem reported: {question}\n\n"
         f"Conversation so far:\n{convo}"
     )
+    # Inject language into all text field descriptions so Gemini honors it
+    # even in structured-output mode (it reads field descriptions).
+    import copy as _copy
+    lang_note = f"MUST be in {detected_lang}."
+    schema_with_lang = _copy.deepcopy(DIAGNOSE_DECISION_SCHEMA)
+    schema_with_lang["properties"]["message"] = {
+        "type": "string",
+        "description": f"{lang_note} Your question or reply to the technician.",
+    }
+    res_props = schema_with_lang["properties"]["resolution"].get("properties", {})
+    for field in ("likely_cause", "confirmed_condition", "confidence_justification"):
+        if field in res_props:
+            res_props[field]["description"] = lang_note
+    if "next_steps" in res_props:
+        res_props["next_steps"]["description"] = f"Each step {lang_note}"
+        if isinstance(res_props["next_steps"].get("items"), dict):
+            res_props["next_steps"]["items"]["description"] = lang_note
     raw = llm_client.chat(
         system=system_prompt,
         user_message=user_message,
         model=ANSWER_MODEL,
         max_tokens=1024,
-        json_schema=DIAGNOSE_DECISION_SCHEMA,
+        json_schema=schema_with_lang,
         cache_system=True,
     )
 
@@ -651,6 +689,17 @@ def diagnose_step(
     # ------------------------------------------------------------------
     decision = _parse_decision(raw)
     identified_machine = decision.get("identified_machine")
+    _res = decision.get("resolution")
+    # Treat dummy/off-topic resolutions as non-resolved so the chat shows
+    # the message as plain text rather than a resolution card.
+    _NA = {"n/a", "na", "—", "-", ""}
+    _offtopic_phrases = ("issue is resolved", "no further action", "user confirmed", "not machine")
+    if isinstance(_res, dict):
+        _lc = _res.get("likely_cause", "").strip().lower()
+        if _lc in _NA or any(p in _lc for p in _offtopic_phrases):
+            _res = None
+            decision["resolution"] = None
+            decision["action"] = "ask"
     is_resolved = (
         decision.get("action") == "resolve"
         and isinstance(decision.get("resolution"), dict)

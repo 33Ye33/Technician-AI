@@ -133,6 +133,27 @@ def _chat_openai(
     return response.choices[0].message.content or ""
 
 
+def _gemini_schema(schema: dict) -> dict:
+    """Convert JSON Schema to Gemini-compatible format:
+    - Replace ["string","null"] union types with nullable:true
+    - Remove additionalProperties (unsupported by Gemini)
+    """
+    schema = {k: v for k, v in schema.items() if k != "additionalProperties"}
+    t = schema.get("type")
+    if isinstance(t, list):
+        non_null = [x for x in t if x != "null"]
+        schema["type"] = non_null[0] if non_null else "string"
+        schema["nullable"] = True
+    if "properties" in schema:
+        schema["properties"] = {
+            k: _gemini_schema(v) if isinstance(v, dict) else v
+            for k, v in schema["properties"].items()
+        }
+    if "items" in schema and isinstance(schema["items"], dict):
+        schema["items"] = _gemini_schema(schema["items"])
+    return schema
+
+
 def _chat_google(
     system: str,
     user_message: str,
@@ -149,7 +170,7 @@ def _chat_google(
     )
     if json_schema is not None:
         config_kwargs["response_mime_type"] = "application/json"
-        config_kwargs["response_schema"] = json_schema
+        config_kwargs["response_schema"] = _gemini_schema(json_schema)
 
     response = client.models.generate_content(
         model=model,

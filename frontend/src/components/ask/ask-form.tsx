@@ -48,17 +48,7 @@ export function AskForm({ onSubmit, onDiagnose, loading }: AskFormProps) {
         </span>
         <div className="flex items-center gap-2">
           <Button
-            type="submit"
-            disabled={loading || !question.trim()}
-            size="sm"
-            className="font-mono text-[11px] uppercase tracking-wider h-7 px-3"
-          >
-            <Send className="h-3 w-3 mr-1.5" />
-            Submit Query
-          </Button>
-          <Button
             type="button"
-            variant="secondary"
             disabled={loading || !question.trim()}
             size="sm"
             className="font-mono text-[11px] uppercase tracking-wider h-7 px-3"
@@ -66,6 +56,16 @@ export function AskForm({ onSubmit, onDiagnose, loading }: AskFormProps) {
           >
             <Stethoscope className="h-3 w-3 mr-1.5" />
             Diagnose
+          </Button>
+          <Button
+            type="submit"
+            variant="secondary"
+            disabled={loading || !question.trim()}
+            size="sm"
+            className="font-mono text-[11px] uppercase tracking-wider h-7 px-3"
+          >
+            <Send className="h-3 w-3 mr-1.5" />
+            Quick Ask
           </Button>
         </div>
       </div>

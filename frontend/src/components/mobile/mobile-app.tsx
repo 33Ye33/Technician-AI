@@ -22,7 +22,7 @@ interface Manual {
 }
 
 export function MobileApp() {
-  const [tab, setTab] = useState<Tab>("ask");
+  const [tab, setTab] = useState<Tab>("diagnose");
   const [loading, setLoading] = useState(false);
 
   const [askMsgs, setAskMsgs] = useState<AskMessage[]>([]);
@@ -142,8 +142,8 @@ export function MobileApp() {
 
 function TabSwitcher({ tab, onChange }: { tab: Tab; onChange: (t: Tab) => void }) {
   const tabs: { id: Tab; label: string; Icon: typeof MessageSquare }[] = [
-    { id: "ask", label: "Ask", Icon: MessageSquare },
     { id: "diagnose", label: "Diagnose", Icon: Stethoscope },
+    { id: "ask", label: "Quick Ask", Icon: MessageSquare },
   ];
   return (
     <div className="flex items-center gap-1 p-1.5 border-b border-border">
