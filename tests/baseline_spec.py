@@ -1,9 +1,19 @@
 """
 Baseline test specification for Technician-AI — Phase 1A pre-change snapshot.
 
+NOTE (diagnose agent-loop redesign): the diagnosis loop no longer uses a
+"RESOLVED:" text prefix, the questions_asked progress note, or a minimum
+question count. The agent now returns a structured per-turn decision
+(identified_machine / reasoning / action ask|resolve / message / resolution)
+and decides when to conclude based on evidence, not a fixed count. The
+diagnose-specific expectations below that mention "RESOLVED:" prefix or a
+3-question minimum describe the OLD contract and are retained only as
+historical reference. Safety-gate and evidence-classification expectations
+still apply.
+
 Each entry in TEST_CASES is a dict that a test runner can execute against
 the live /api/ask or /api/diagnose endpoints. CURRENT_STATUS reflects what
-the code analysis predicts TODAY (2026-05-31), before any Phase 1A changes.
+the code analysis predicted before any Phase 1A changes.
 
 How to read CURRENT_STATUS:
   PASS  — the prompt instructions already enforce the behaviour; a compliant

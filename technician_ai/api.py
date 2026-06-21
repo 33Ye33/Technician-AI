@@ -9,6 +9,7 @@ from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel
 
 from . import database as db
 from . import diagnosis as diagnosis_fsm
@@ -28,12 +29,26 @@ _MACHINE_DISPLAY: list[tuple[tuple[str, ...], str]] = [
     (("junction box soldering",), "Junction Box Soldering Machine"),
 ]
 
+_MACHINE_NAMES: list[str] = [name for _, name in _MACHINE_DISPLAY]
+
+# After this many assistant turns without a resolution, nudge the agent to
+# conclude with an escalation recommendation (soft cap, configurable).
+DIAGNOSE_ESCALATE_AFTER = int(os.environ.get("DIAGNOSE_ESCALATE_AFTER", "8"))
+
+
 def _detect_machine(query: str) -> str | None:
     q = query.lower()
     for phrases, name in _MACHINE_DISPLAY:
         if any(p in q for p in phrases):
             return name
     return None
+
+
+def _valid_machine(name: str | None) -> str | None:
+    """Return the name only if it matches a known machine, else None."""
+    return name if name in _MACHINE_NAMES else None
+
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(dotenv_path=PROJECT_ROOT / ".env", override=True)
 
@@ -284,9 +299,17 @@ def api_diagnose_start(question: str = Form(...)):
         question, is_safety_critical=bool(hazard), hazard_type=hazard
     )
 
-    result = rag.diagnose_step(question, history=[], questions_asked=0, session=fsm)
-
     machine = _detect_machine(question)
+    result = rag.diagnose_step(
+        question, history=[], session=fsm,
+        machine=machine, machine_options=_MACHINE_NAMES,
+    )
+
+    # The agent may identify the machine from the description on turn 1.
+    machine = machine or _valid_machine(result.get("identified_machine"))
+    fsm["machine"] = machine
+    result["machine"] = machine
+
     doc_ids = [s["id"] for s in result.get("sources", [])]
     db_history = [{"role": "assistant", "text": result["message"], "doc_ids": doc_ids, "step": 1}]
 
@@ -334,23 +357,27 @@ def api_diagnose_continue(
     question = session["question"]
     history = list(session["history"])
     fsm = session.get("fsm", {})
+    machine = session.get("machine")
 
-    questions_asked = sum(1 for m in history if m["role"] == "assistant")
-
-    # Determine the last assistant message to give the FSM transition context.
-    last_assistant_message = next(
-        (m["content"] for m in reversed(history) if m["role"] == "assistant"),
-        "",
-    )
-
-    # Advance FSM state based on the last assistant prompt and the user answer.
-    diagnosis_fsm.advance_state(fsm, last_assistant_message, answer)
+    # Soft escalation: nudge the agent to conclude once the session runs long.
+    # diagnose_step owns evidence/safety advancement (no double advance here).
+    escalate = fsm.get("questions_asked", 0) >= DIAGNOSE_ESCALATE_AFTER
 
     db_history = session.get("db_history", [])
     db_history.append({"role": "user", "text": answer, "step": len(db_history) + 1})
 
     history.append({"role": "user", "content": answer})
-    result = rag.diagnose_step(question, history, questions_asked=questions_asked, session=fsm)
+    result = rag.diagnose_step(
+        question, history, session=fsm,
+        machine=machine, machine_options=_MACHINE_NAMES, escalate=escalate,
+    )
+
+    # Capture the machine once the agent (or the reply) makes it clear.
+    if not machine:
+        machine = _valid_machine(result.get("identified_machine")) or _detect_machine(answer)
+        session["machine"] = machine
+        fsm["machine"] = machine
+        result["machine"] = machine
 
     doc_ids = [s["id"] for s in result.get("sources", [])]
     all_doc_ids: list[int] = session.get("all_doc_ids", [])

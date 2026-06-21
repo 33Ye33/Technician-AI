@@ -35,7 +35,8 @@ export function DiagnoseCard({ initial, question }: DiagnoseCardProps) {
   );
   const [sources, setSources] = useState(initial.sources);
   const [conversationId, setConversationId] = useState<number | null>(initial.conversation_id);
-  const [step, setStep] = useState(initial.step);
+  const [phase, setPhase] = useState(initial.phase);
+  const [machine, setMachine] = useState<string | null | undefined>(initial.machine);
   const [isSafetyCritical, setIsSafetyCritical] = useState(initial.is_safety_critical ?? false);
   const [answer, setAnswer] = useState("");
   const [loading, setLoading] = useState(false);
@@ -57,7 +58,8 @@ export function DiagnoseCard({ initial, question }: DiagnoseCardProps) {
         }
         return next;
       });
-      setStep(res.step);
+      setPhase(res.phase);
+      setMachine(res.machine);
       if (res.is_safety_critical === false) setIsSafetyCritical(false);
       if (res.is_resolved) {
         setResolved(true);
@@ -83,23 +85,27 @@ export function DiagnoseCard({ initial, question }: DiagnoseCardProps) {
       <CardContent className="pt-4 space-y-3">
         <div className="flex items-center justify-between">
           <span className="text-xs font-mono text-muted-foreground">
-            {isSafetyCritical ? "Safety Hold" : `Diagnostic · Step ${step}`}
+            {phase === "safety_hold" || isSafetyCritical
+              ? "Safety Hold"
+              : resolved
+                ? "Resolution"
+                : phase === "identify_machine"
+                  ? "Identifying machine"
+                  : machine
+                    ? `Diagnostic · ${machine}`
+                    : "Diagnostic"}
           </span>
           {resolved ? (
             <span className="text-xs font-mono text-green-400 flex items-center gap-1">
               <CheckCircle className="h-3 w-3" /> Root cause confirmed
             </span>
-          ) : isSafetyCritical ? (
+          ) : phase === "safety_hold" || isSafetyCritical ? (
             <span className="text-xs font-mono text-destructive flex items-center gap-1">
               <ShieldAlert className="h-3 w-3" /> Confirm personnel and equipment are safe before diagnosis
             </span>
-          ) : step < 3 ? (
-            <span className="text-xs font-mono text-muted-foreground">
-              {step}/3 &mdash; gathering evidence
-            </span>
           ) : (
             <span className="text-xs font-mono text-muted-foreground">
-              Narrowing down...
+              Gathering evidence
             </span>
           )}
         </div>

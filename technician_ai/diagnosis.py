@@ -219,18 +219,11 @@ def _next_state(session):
             return STATE_SYMPTOM_GATHERING
         return STATE_SAFETY_CHECK
 
+    # Once safety is cleared, the session stays in a single INVESTIGATING phase.
+    # The LLM agent decides when to keep asking vs. resolve — there is no
+    # count-based progression through sub-states anymore.
     if current == STATE_SYMPTOM_GATHERING:
-        if session["symptoms_gathered"] >= 2:
-            return STATE_STANDARD_COMPARISON
         return STATE_SYMPTOM_GATHERING
-
-    if current == STATE_STANDARD_COMPARISON:
-        if session["has_spec_comparison"]:
-            return STATE_CAUSE_NARROWING
-        return STATE_STANDARD_COMPARISON
-
-    if current == STATE_CAUSE_NARROWING:
-        return STATE_CAUSE_NARROWING
 
     return current
 
@@ -247,6 +240,7 @@ def new_session(question, is_safety_critical=False, hazard_type=None):
     return {
         "state": STATE_SAFETY_CHECK if is_safety_critical else STATE_SYMPTOM_GATHERING,
         "question": question,
+        "machine": None,             # confirmed machine name once identified
         "is_safety_critical": is_safety_critical,
         "hazard_type": hazard_type,
         "prerequisites": prerequisites,
@@ -255,7 +249,7 @@ def new_session(question, is_safety_critical=False, hazard_type=None):
         "obstruction_checked": False,
         "has_spec_comparison": False,
         "symptoms_gathered": 0,
-        "questions_asked": 0,
+        "questions_asked": 0,        # assistant turns so far (used only for soft escalation)
         "history": [],
         # Evidence quality tracking
         "evidence_log": [],          # list of quality strings per technician turn
@@ -434,14 +428,6 @@ def get_state_prompt_addition(session):
             "[FSM OVERRIDE] A safety door issue has been identified. Before naming specific "
             "components as the root cause, ask the technician to check whether any obstruction, "
             "foreign object, pallet, or packaging is blocking the door."
-        )
-
-    # Cause narrowing without sufficient evidence.
-    if state == STATE_CAUSE_NARROWING and session["questions_asked"] < 3:
-        blocks.append(
-            "[FSM NOTE] You are in the CAUSE_NARROWING phase but have not yet gathered "
-            "enough evidence. Do not provide a resolution until you have asked at least "
-            "3 diagnostic questions."
         )
 
     # Evidence quality summary — injected every non-trivial turn.
