@@ -16,6 +16,17 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 /* Better tap targets on mobile */
 button, [role="button"] { touch-action: manipulation; }
 
+/* Prevent iOS Safari from auto-zooming when focusing an input/textarea whose
+   font-size is < 16px. Scoped to touch devices so desktop keeps its smaller type.
+   Unlayered so it overrides Tailwind's text-sm/text-xs utilities. */
+@media (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]),
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
