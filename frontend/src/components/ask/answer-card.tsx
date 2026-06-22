@@ -27,7 +27,7 @@ export function AnswerCard({ result, question }: { result: AskResponse; question
         <Markdown>{result.answer}</Markdown>
         <SourceList sources={result.sources} />
         <FeedbackWidget conversationId={result.conversation_id} hideAddNote />
-        <DiagnoseRatingWidget conversationId={result.conversation_id} label="Rate this answer" />
+        <DiagnoseRatingWidget conversationId={result.conversation_id} />
       </CardContent>
     </Card>
   );

@@ -94,7 +94,7 @@ function AskBubble({ msg }: { msg: AskMessage }) {
       <Markdown>{data.answer}</Markdown>
       <SourceList sources={data.sources} />
       {data.conversation_id > 0 && <FeedbackWidget conversationId={data.conversation_id} hideAddNote />}
-      {data.conversation_id > 0 && <DiagnoseRatingWidget conversationId={data.conversation_id} label="Rate this answer" />}
+      {data.conversation_id > 0 && <DiagnoseRatingWidget conversationId={data.conversation_id} />}
     </AssistantShell>
   );
 }
