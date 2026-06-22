@@ -75,6 +75,19 @@ const translations = {
     delete_manual: "Delete manual",
     delete_confirm: (name: string) => `Delete ${name} and all its chunks?`,
 
+    // Feedback widget
+    feedback_did_it_fix: "Did this fix the issue?",
+    feedback_worked: "Worked",
+    feedback_didnt_work: "Didn't work",
+    feedback_add_note: "Add note",
+    feedback_cancel: "Cancel",
+    feedback_save: "Save",
+    feedback_what_happened: "What actually happened on the floor?",
+    feedback_what_missing: "What tip or context was missing?",
+    feedback_describe: "Describe what you learned...",
+    feedback_marked_worked: "Marked as worked. Thanks!",
+    feedback_failed: "Failed to submit feedback.",
+
     // Language picker
     lang_picker_title: "Choose your language",
     lang_picker_subtitle: "You can change this later in settings",
@@ -150,6 +163,19 @@ const translations = {
     chunks: "段",
     delete_manual: "删除手册",
     delete_confirm: (name: string) => `删除 ${name} 及其所有内容？`,
+
+    // Feedback widget
+    feedback_did_it_fix: "这个方法解决问题了吗？",
+    feedback_worked: "解决了",
+    feedback_didnt_work: "没解决",
+    feedback_add_note: "添加备注",
+    feedback_cancel: "取消",
+    feedback_save: "保存",
+    feedback_what_happened: "现场实际发生了什么？",
+    feedback_what_missing: "缺少了哪些提示或背景信息？",
+    feedback_describe: "描述您学到的内容...",
+    feedback_marked_worked: "已标记为有效，谢谢！",
+    feedback_failed: "提交反馈失败。",
 
     // Language picker
     lang_picker_title: "选择您的语言",
