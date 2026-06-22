@@ -157,7 +157,7 @@ export function DiagnoseCard({ initial, question }: DiagnoseCardProps) {
               className="font-mono text-[11px] uppercase tracking-wider"
             >
               <Send className="h-3 w-3 mr-1.5" />
-              Continue
+              {t.btn_continue}
             </Button>
           </div>
         )}

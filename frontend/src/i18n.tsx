@@ -87,6 +87,7 @@ const translations = {
     feedback_describe: "Describe what you learned...",
     feedback_marked_worked: "Marked as worked. Thanks!",
     feedback_failed: "Failed to submit feedback.",
+    btn_continue: "Continue",
 
     // Language picker
     lang_picker_title: "Choose your language",
@@ -176,6 +177,7 @@ const translations = {
     feedback_describe: "描述您学到的内容...",
     feedback_marked_worked: "已标记为有效，谢谢！",
     feedback_failed: "提交反馈失败。",
+    btn_continue: "继续",
 
     // Language picker
     lang_picker_title: "选择您的语言",
