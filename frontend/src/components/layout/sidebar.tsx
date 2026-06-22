@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { X, FileText, Download, FileSpreadsheet } from "lucide-react";
+import { useLang } from "@/i18n";
 import { TopicTree } from "@/components/knowledge/topic-tree";
 import { UploadForm } from "@/components/ingest/upload-form";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -21,6 +22,7 @@ function formatBytes(bytes: number): string {
 }
 
 export function Sidebar({ topics, onUploadComplete }: SidebarProps) {
+  const { t } = useLang();
   const [manuals, setManuals] = useState<Manual[]>([]);
   const [manualFiles, setManualFiles] = useState<ManualFile[]>([]);
   const [deleting, setDeleting] = useState<string | null>(null);
@@ -34,7 +36,7 @@ export function Sidebar({ topics, onUploadComplete }: SidebarProps) {
   useEffect(() => { refreshManuals(); }, [refreshManuals]);
 
   async function handleDelete(title: string) {
-    if (!confirm(`Delete "${title}" and all its chunks?`)) return;
+    if (!confirm(t.delete_confirm(title))) return;
     setDeleting(title);
     try {
       await api.deleteManual(title);
@@ -50,7 +52,7 @@ export function Sidebar({ topics, onUploadComplete }: SidebarProps) {
     <aside className="w-full lg:w-[320px] shrink-0 space-y-5">
       <section>
         <h2 className="text-[10px] font-mono uppercase tracking-[0.15em] text-muted-foreground mb-2">
-          Internal Knowledge
+          {t.internal_knowledge}
         </h2>
         <div className="border border-border rounded-sm">
           <ScrollArea className="h-[360px] p-2">
@@ -62,7 +64,7 @@ export function Sidebar({ topics, onUploadComplete }: SidebarProps) {
       {manualFiles.length > 0 && (
         <section>
           <h2 className="text-[10px] font-mono uppercase tracking-[0.15em] text-muted-foreground mb-2">
-            Manuals Library ({manualFiles.length})
+            {t.manuals_library} ({manualFiles.length})
           </h2>
           <div className="border border-border rounded-sm divide-y divide-border">
             {manualFiles.map((f) => {
@@ -88,7 +90,7 @@ export function Sidebar({ topics, onUploadComplete }: SidebarProps) {
                     </a>
                     <p className="text-[10px] text-muted-foreground font-mono">
                       {formatBytes(f.size)}
-                      {ingested && <span className="ml-1.5 text-emerald-600">· indexed</span>}
+                      {ingested && <span className="ml-1.5 text-emerald-600">· {t.indexed}</span>}
                     </p>
                   </div>
                   <a
@@ -109,7 +111,7 @@ export function Sidebar({ topics, onUploadComplete }: SidebarProps) {
       {manuals.length > 0 && (
         <section>
           <h2 className="text-[10px] font-mono uppercase tracking-[0.15em] text-muted-foreground mb-2">
-            Uploaded Manuals
+            {t.uploaded_manuals}
           </h2>
           <div className="border border-border rounded-sm divide-y divide-border">
             {manuals.map((m) => (
@@ -117,7 +119,7 @@ export function Sidebar({ topics, onUploadComplete }: SidebarProps) {
                 <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                 <div className="flex-1 min-w-0">
                   <p className="text-xs truncate">{m.title}</p>
-                  <p className="text-[10px] text-muted-foreground font-mono">{m.chunks} chunks</p>
+                  <p className="text-[10px] text-muted-foreground font-mono">{m.chunks} {t.chunks}</p>
                 </div>
                 <button
                   onClick={() => handleDelete(m.title)}
@@ -135,7 +137,7 @@ export function Sidebar({ topics, onUploadComplete }: SidebarProps) {
 
       <section>
         <h2 className="text-[10px] font-mono uppercase tracking-[0.15em] text-muted-foreground mb-2">
-          Add a Manual
+          {t.add_manual}
         </h2>
         <UploadForm onComplete={() => { onUploadComplete(); refreshManuals(); }} />
       </section>

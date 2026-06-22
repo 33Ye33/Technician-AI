@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Send, CheckCircle, ShieldAlert } from "lucide-react";
+import { useLang } from "@/i18n";
 import { Markdown } from "@/components/shared/markdown";
 import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -24,6 +25,7 @@ interface DiagnoseCardProps {
 }
 
 export function DiagnoseCard({ initial, question }: DiagnoseCardProps) {
+  const { t } = useLang();
   const [sessionId] = useState(initial.session_id);
   const [history, setHistory] = useState<HistoryEntry[]>([
     { role: "assistant", content: initial.message },
@@ -68,7 +70,7 @@ export function DiagnoseCard({ initial, question }: DiagnoseCardProps) {
         setConversationId(res.conversation_id);
       }
     } catch {
-      setHistory((h) => [...h, { role: "assistant", content: "Error — please try again." }]);
+      setHistory((h) => [...h, { role: "assistant", content: t.label_error }]);
     } finally {
       setLoading(false);
     }
@@ -86,26 +88,26 @@ export function DiagnoseCard({ initial, question }: DiagnoseCardProps) {
         <div className="flex items-center justify-between">
           <span className="text-xs font-mono text-muted-foreground">
             {phase === "safety_hold" || isSafetyCritical
-              ? "Safety Hold"
+              ? t.status_safety_hold
               : resolved
-                ? "Resolution"
+                ? t.status_root_cause
                 : phase === "identify_machine"
-                  ? "Identifying machine"
+                  ? t.status_identifying
                   : machine
-                    ? `Diagnostic · ${machine}`
-                    : "Diagnostic"}
+                    ? `${t.status_investigating} · ${machine}`
+                    : t.status_investigating}
           </span>
           {resolved ? (
             <span className="text-xs font-mono text-green-400 flex items-center gap-1">
-              <CheckCircle className="h-3 w-3" /> Root cause confirmed
+              <CheckCircle className="h-3 w-3" /> {t.status_root_cause}
             </span>
           ) : phase === "safety_hold" || isSafetyCritical ? (
             <span className="text-xs font-mono text-destructive flex items-center gap-1">
-              <ShieldAlert className="h-3 w-3" /> Confirm personnel and equipment are safe before diagnosis
+              <ShieldAlert className="h-3 w-3" /> {t.label_confirm_safe}
             </span>
           ) : (
             <span className="text-xs font-mono text-muted-foreground">
-              Gathering evidence
+              {t.status_gathering}
             </span>
           )}
         </div>
@@ -131,7 +133,7 @@ export function DiagnoseCard({ initial, question }: DiagnoseCardProps) {
           ))}
         </div>
 
-        {loading && <Spinner text="Analyzing..." />}
+        {loading && <Spinner text={t.label_analyzing} />}
 
         {/* Input for next answer */}
         {!resolved && !loading && (
@@ -139,7 +141,7 @@ export function DiagnoseCard({ initial, question }: DiagnoseCardProps) {
             <Textarea
               value={answer}
               onChange={(e) => setAnswer(e.target.value)}
-              placeholder="Describe what you see..."
+              placeholder={t.placeholder_diagnose}
               className="min-h-[60px] text-sm bg-card font-mono"
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Send, Stethoscope } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import { useLang } from "@/i18n";
 
 interface AskFormProps {
   onSubmit: (question: string) => void;
@@ -10,6 +11,7 @@ interface AskFormProps {
 }
 
 export function AskForm({ onSubmit, onDiagnose, loading }: AskFormProps) {
+  const { t } = useLang();
   const [question, setQuestion] = useState("");
 
   function handleSubmit(e: React.FormEvent) {
@@ -28,7 +30,7 @@ export function AskForm({ onSubmit, onDiagnose, loading }: AskFormProps) {
   return (
     <form onSubmit={handleSubmit}>
       <p className="text-[11px] font-mono text-foreground tracking-wide mb-2">
-        Type the issue you ran into on the line in the box below
+        {t.ask_instruction}
       </p>
       <Textarea
         value={question}
@@ -44,7 +46,7 @@ export function AskForm({ onSubmit, onDiagnose, loading }: AskFormProps) {
       />
       <div className="flex items-center justify-between mt-2">
         <span className="text-[10px] text-muted-foreground font-mono tracking-wide">
-          ENTER TO SEND &middot; SHIFT+ENTER NEW LINE
+          {t.ask_enter_hint}
         </span>
         <div className="flex items-center gap-2">
           <Button
@@ -55,7 +57,7 @@ export function AskForm({ onSubmit, onDiagnose, loading }: AskFormProps) {
             onClick={handleDiagnose}
           >
             <Stethoscope className="h-3 w-3 mr-1.5" />
-            Diagnose
+            {t.btn_diagnose}
           </Button>
           <Button
             type="submit"
@@ -65,7 +67,7 @@ export function AskForm({ onSubmit, onDiagnose, loading }: AskFormProps) {
             className="font-mono text-[11px] uppercase tracking-wider h-7 px-3"
           >
             <Send className="h-3 w-3 mr-1.5" />
-            Quick Ask
+            {t.btn_quick_ask}
           </Button>
         </div>
       </div>

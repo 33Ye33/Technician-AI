@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useLang } from "@/i18n";
 import { Header } from "@/components/layout/header";
 import { KnowledgeDrawer } from "@/components/layout/knowledge-drawer";
 import { AskForm } from "@/components/ask/ask-form";
@@ -16,6 +17,7 @@ type ResultView =
   | { kind: "diagnose"; data: DiagnoseResponse; question: string };
 
 export default function App() {
+  const { t } = useLang();
   const [result, setResult] = useState<ResultView | null>(null);
   const [loading, setLoading] = useState(false);
   const [entries, setEntries] = useState<KnowledgeEntry[]>([]);
@@ -84,7 +86,7 @@ export default function App() {
         <main className="space-y-5">
           <section>
             <h2 className="text-sm font-mono uppercase tracking-[0.15em] text-muted-foreground mb-3">
-              &sect; &nbsp;Query &amp; Diagnose
+              &sect; &nbsp;{t.tab_quick_ask} &amp; {t.tab_diagnose}
             </h2>
             <AskForm onSubmit={handleAsk} onDiagnose={handleDiagnose} loading={loading} />
           </section>
