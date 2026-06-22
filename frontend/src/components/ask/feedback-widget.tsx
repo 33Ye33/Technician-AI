@@ -66,15 +66,15 @@ export function FeedbackWidget({ conversationId, hideAddNote = false }: Feedback
     <div className="pt-3 space-y-2">
       <span className="text-xs font-semibold text-foreground">{t.feedback_did_it_fix}</span>
       <div className="flex flex-wrap gap-2">
-        <Button variant="outline" size="sm" className="h-8 text-sm border-2 font-medium" onClick={() => submit("worked")}>
-          <Check className="h-3.5 w-3.5 mr-1.5 text-emerald-500" /> {t.feedback_worked}
+        <Button size="sm" className="h-9 px-4 text-sm font-semibold bg-emerald-600 hover:bg-emerald-500 text-white border-0" onClick={() => submit("worked")}>
+          <Check className="h-4 w-4 mr-1.5" /> {t.feedback_worked}
         </Button>
-        <Button variant="outline" size="sm" className="h-8 text-sm border-2 font-medium" onClick={() => setState("failed")}>
-          <X className="h-3.5 w-3.5 mr-1.5 text-destructive" /> {t.feedback_didnt_work}
+        <Button size="sm" className="h-9 px-4 text-sm font-semibold bg-destructive hover:bg-destructive/80 text-white border-0" onClick={() => setState("failed")}>
+          <X className="h-4 w-4 mr-1.5" /> {t.feedback_didnt_work}
         </Button>
         {!hideAddNote && (
-          <Button variant="outline" size="sm" className="h-8 text-sm border-2 font-medium" onClick={() => setState("learned")}>
-            <PlusCircle className="h-3.5 w-3.5 mr-1.5" /> {t.feedback_add_note}
+          <Button variant="outline" size="sm" className="h-9 px-4 text-sm font-medium border-2" onClick={() => setState("learned")}>
+            <PlusCircle className="h-4 w-4 mr-1.5" /> {t.feedback_add_note}
           </Button>
         )}
       </div>
