@@ -52,6 +52,12 @@ function AskCard({ conv }: { conv: AskConversation }) {
             <p className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-0.5">AI</p>
             <p className="text-xs whitespace-pre-wrap leading-relaxed">{conv.answer}</p>
           </div>
+          {conv.feedback_comment && (
+            <div className="px-3 py-2 bg-amber-500/5">
+              <p className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-0.5">Feedback</p>
+              <p className="text-xs leading-relaxed">{conv.feedback_comment}</p>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -113,6 +119,12 @@ function SessionCard({ session }: { session: DiagnoseSession }) {
               <p className="text-xs whitespace-pre-wrap leading-relaxed">{turn.text}</p>
             </div>
           ))}
+          {detail.feedback_comment && (
+            <div className="px-3 py-2 bg-amber-500/5">
+              <p className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-0.5">Feedback</p>
+              <p className="text-xs leading-relaxed">{detail.feedback_comment}</p>
+            </div>
+          )}
         </div>
       )}
     </div>
