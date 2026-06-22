@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Star } from "lucide-react";
 import { api } from "@/hooks/use-api";
 import { cn } from "@/lib/utils";
+import { useLang } from "@/i18n";
 
 interface DiagnoseRatingWidgetProps {
   sessionId?: string;
@@ -9,9 +10,9 @@ interface DiagnoseRatingWidgetProps {
   label?: string;
 }
 
-const labels = ["", "Wrong", "Partially helpful", "OK", "Good", "Spot on"];
-
-export function DiagnoseRatingWidget({ sessionId, conversationId, label = "Rate this diagnosis" }: DiagnoseRatingWidgetProps) {
+export function DiagnoseRatingWidget({ sessionId, conversationId, label }: DiagnoseRatingWidgetProps) {
+  const { t } = useLang();
+  const defaultLabel = sessionId ? t.rating_default_diagnose : t.rating_default_ask;
   const [rating, setRating] = useState(0);
   const [hover, setHover] = useState(0);
   const [comment, setComment] = useState("");
@@ -36,16 +37,15 @@ export function DiagnoseRatingWidget({ sessionId, conversationId, label = "Rate 
   if (done) {
     return (
       <div className="mt-4 pt-4 border-t border-border text-sm font-mono text-emerald-500 text-center py-2">
-        Thanks for the feedback!
+        {t.rating_done}
       </div>
     );
   }
 
   return (
     <div className="mt-4 pt-4 border-t border-border space-y-3">
-      <p className="text-xs font-semibold text-foreground">{label}</p>
+      <p className="text-xs font-semibold text-foreground">{label ?? defaultLabel}</p>
 
-      {/* Stars */}
       <div className="flex items-center gap-2">
         {[1, 2, 3, 4, 5].map((n) => (
           <button
@@ -66,15 +66,14 @@ export function DiagnoseRatingWidget({ sessionId, conversationId, label = "Rate 
           </button>
         ))}
         <span className="ml-1 text-xs text-muted-foreground font-mono min-w-[100px]">
-          {labels[hover || rating]}
+          {t.rating_labels[(hover || rating) - 1] ?? ""}
         </span>
       </div>
 
-      {/* Comment box — always visible */}
       <textarea
         value={comment}
         onChange={(e) => setComment(e.target.value)}
-        placeholder="Add a comment (optional) — what happened on the floor?"
+        placeholder={t.rating_comment_placeholder}
         className="w-full min-h-[64px] rounded-md border border-border bg-muted/30 px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground/40"
       />
 
@@ -88,7 +87,7 @@ export function DiagnoseRatingWidget({ sessionId, conversationId, label = "Rate 
             : "bg-muted text-muted-foreground cursor-not-allowed"
         )}
       >
-        {submitting ? "Saving..." : "Submit Rating"}
+        {submitting ? t.rating_saving : t.rating_submit}
       </button>
     </div>
   );

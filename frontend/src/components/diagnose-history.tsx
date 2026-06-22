@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { CheckCircle2, Clock, ChevronDown, ChevronUp, Star, MessageSquare, Stethoscope } from "lucide-react";
 import { api } from "@/hooks/use-api";
 import { cn } from "@/lib/utils";
+import { useLang } from "@/i18n";
 import type { AskConversation, DiagnoseSession } from "@/types/api";
 
 export function formatDate(iso: string): string {
@@ -22,6 +23,7 @@ function StarRow({ rating, comment }: { rating: number | null; comment: string |
 }
 
 function AskCard({ conv }: { conv: AskConversation }) {
+  const { t } = useLang();
   const [expanded, setExpanded] = useState(false);
   return (
     <div className="border border-border rounded-sm overflow-hidden">
@@ -33,7 +35,7 @@ function AskCard({ conv }: { conv: AskConversation }) {
         <div className="flex-1 min-w-0">
           <p className="text-xs text-foreground line-clamp-2 leading-snug">{conv.question}</p>
           <div className="flex items-center gap-2 mt-1">
-            <span className="text-[10px] font-mono text-muted-foreground">Quick Ask</span>
+            <span className="text-[10px] font-mono text-muted-foreground">{t.tab_quick_ask}</span>
             <span className="text-[10px] text-muted-foreground">{formatDate(conv.created_at)}</span>
           </div>
           <StarRow rating={conv.rating} comment={conv.feedback_comment} />
@@ -45,16 +47,16 @@ function AskCard({ conv }: { conv: AskConversation }) {
       {expanded && (
         <div className="border-t border-border divide-y divide-border/50 bg-muted/20">
           <div className="px-3 py-2 bg-background">
-            <p className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-0.5">Technician</p>
+            <p className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-0.5">{t.label_technician}</p>
             <p className="text-xs leading-relaxed">{conv.question}</p>
           </div>
           <div className="px-3 py-2 bg-muted/30">
-            <p className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-0.5">AI</p>
+            <p className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-0.5">{t.label_ai}</p>
             <p className="text-xs whitespace-pre-wrap leading-relaxed">{conv.answer}</p>
           </div>
           {conv.feedback_comment && (
             <div className="px-3 py-2 bg-amber-500/5">
-              <p className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-0.5">Feedback</p>
+              <p className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-0.5">{t.label_feedback}</p>
               <p className="text-xs leading-relaxed">{conv.feedback_comment}</p>
             </div>
           )}
@@ -65,6 +67,7 @@ function AskCard({ conv }: { conv: AskConversation }) {
 }
 
 function SessionCard({ session }: { session: DiagnoseSession }) {
+  const { t } = useLang();
   const [expanded, setExpanded] = useState(false);
   const [detail, setDetail] = useState<DiagnoseSession | null>(null);
 
@@ -93,11 +96,11 @@ function SessionCard({ session }: { session: DiagnoseSession }) {
           <p className="text-xs text-foreground line-clamp-2 leading-snug">{session.question}</p>
           <div className="flex items-center gap-2 mt-1 flex-wrap">
             <span className="text-[10px] font-mono text-muted-foreground flex items-center gap-0.5">
-              <Stethoscope className="h-2.5 w-2.5" /> {session.machine ?? "Diagnose"}
+              <Stethoscope className="h-2.5 w-2.5" /> {session.machine ?? t.tab_diagnose}
             </span>
             <span className="text-[10px] text-muted-foreground">{formatDate(session.created_at)}</span>
             {session.turn_count != null && (
-              <span className="text-[10px] text-muted-foreground">{session.turn_count} turns</span>
+              <span className="text-[10px] text-muted-foreground">{session.turn_count} {t.label_turns}</span>
             )}
           </div>
           {session.final_resolution && (
@@ -114,14 +117,14 @@ function SessionCard({ session }: { session: DiagnoseSession }) {
           {detail.history?.map((turn, i) => (
             <div key={i} className={cn("px-3 py-2", turn.role === "user" ? "bg-background" : "bg-muted/30")}>
               <p className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-0.5">
-                {turn.role === "user" ? "Technician" : "AI"}
+                {turn.role === "user" ? t.label_technician : t.label_ai}
               </p>
               <p className="text-xs whitespace-pre-wrap leading-relaxed">{turn.text}</p>
             </div>
           ))}
           {detail.feedback_comment && (
             <div className="px-3 py-2 bg-amber-500/5">
-              <p className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-0.5">Feedback</p>
+              <p className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-0.5">{t.label_feedback}</p>
               <p className="text-xs leading-relaxed">{detail.feedback_comment}</p>
             </div>
           )}
@@ -151,9 +154,10 @@ export function DiagnoseHistory() {
     });
   }, []);
 
-  if (loading) return <p className="text-xs text-muted-foreground p-4">Loading...</p>;
+  const { t } = useLang();
+  if (loading) return <p className="text-xs text-muted-foreground p-4">{t.loading}</p>;
   if (items.length === 0)
-    return <p className="text-xs text-muted-foreground p-4">No history yet.</p>;
+    return <p className="text-xs text-muted-foreground p-4">{t.no_history}</p>;
 
   return (
     <div className="space-y-2">

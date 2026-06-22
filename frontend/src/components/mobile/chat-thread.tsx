@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { CheckCircle, ShieldAlert, MessageSquare, Stethoscope } from "lucide-react";
+import { useLang } from "@/i18n";
 import { Markdown } from "@/components/shared/markdown";
 import { SourceList } from "@/components/ask/source-list";
 import { FeedbackWidget } from "@/components/ask/feedback-widget";
@@ -16,6 +17,7 @@ interface ChatThreadProps {
 }
 
 export function ChatThread({ tab, askMsgs, diagMsgs, loading }: ChatThreadProps) {
+  const { t } = useLang();
   const bottomRef = useRef<HTMLDivElement>(null);
   const count = tab === "ask" ? askMsgs.length : diagMsgs.length;
 
@@ -35,7 +37,7 @@ export function ChatThread({ tab, askMsgs, diagMsgs, loading }: ChatThreadProps)
 
       {loading && (
         <div className="flex justify-start">
-          <Spinner text={tab === "ask" ? "Searching manuals..." : "Analyzing..."} />
+          <Spinner text={tab === "ask" ? t.label_searching : t.label_analyzing} />
         </div>
       )}
       <div ref={bottomRef} />
@@ -76,16 +78,17 @@ function AssistantShell({
 }
 
 function AskBubble({ msg }: { msg: AskMessage }) {
+  const { t } = useLang();
   if (msg.role === "user") return <UserBubble text={msg.text} />;
   const { data } = msg;
   return (
     <AssistantShell>
       <div className="flex items-center justify-between mb-2">
         <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
-          Response &middot; Conv #{data.conversation_id}
+          {t.status_response} &middot; Conv #{data.conversation_id}
         </span>
         <span className="text-[10px] font-mono text-muted-foreground">
-          {data.sources.length} source{data.sources.length !== 1 && "s"}
+          {data.sources.length} {t.label_sources}
         </span>
       </div>
       <Markdown>{data.answer}</Markdown>
@@ -97,16 +100,17 @@ function AskBubble({ msg }: { msg: AskMessage }) {
 }
 
 function DiagBubble({ msg }: { msg: DiagMessage }) {
+  const { t } = useLang();
   if (msg.role === "user") return <UserBubble text={msg.text} />;
   const { data } = msg;
   const phase = data.phase ?? (data.is_safety_critical ? "safety_hold" : data.is_resolved ? "resolved" : "investigating");
   const safety = phase === "safety_hold";
   const accent = phase === "resolved" ? "green" : safety ? "destructive" : "primary";
   const label =
-    phase === "safety_hold" ? "Safety Hold"
-      : phase === "resolved" ? "Resolution"
-        : phase === "identify_machine" ? "Identifying machine"
-          : data.machine ? `Investigating · ${data.machine}` : "Investigating";
+    phase === "safety_hold" ? t.status_safety_hold
+      : phase === "resolved" ? t.status_root_cause
+        : phase === "identify_machine" ? t.status_identifying
+          : data.machine ? `${t.status_investigating} · ${data.machine}` : t.status_investigating;
 
   return (
     <AssistantShell accent={accent}>
@@ -116,11 +120,11 @@ function DiagBubble({ msg }: { msg: DiagMessage }) {
         </span>
         {data.is_resolved ? (
           <span className="text-[10px] font-mono text-green-400 flex items-center gap-1">
-            <CheckCircle className="h-3 w-3" /> Root cause
+            <CheckCircle className="h-3 w-3" /> {t.status_root_cause}
           </span>
         ) : safety ? (
           <span className="text-[10px] font-mono text-destructive flex items-center gap-1">
-            <ShieldAlert className="h-3 w-3" /> Confirm safe
+            <ShieldAlert className="h-3 w-3" /> {t.label_confirm_safe}
           </span>
         ) : null}
       </div>
@@ -139,12 +143,10 @@ function DiagBubble({ msg }: { msg: DiagMessage }) {
 }
 
 function EmptyState({ tab }: { tab: Tab }) {
+  const { t } = useLang();
   const Icon = tab === "ask" ? MessageSquare : Stethoscope;
-  const title = tab === "ask" ? "Ask anything" : "Guided diagnosis";
-  const sub =
-    tab === "ask"
-      ? "Ask about specs, procedures, or prior fixes. Answers are cited from your manuals and field notes."
-      : "Describe the problem on the line. I'll walk you through safe, evidence-controlled checks one at a time.";
+  const title = tab === "ask" ? t.empty_ask_title : t.empty_diagnose_title;
+  const sub = tab === "ask" ? t.empty_ask_desc : t.empty_diagnose_desc;
   return (
     <div className="flex flex-col items-center justify-center text-center px-6 pt-[18vh]">
       <div className="rounded-full border border-border bg-card p-3 mb-4">

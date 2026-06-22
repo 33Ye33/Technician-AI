@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { FileText, FileSpreadsheet, Download } from "lucide-react";
+import { useLang } from "@/i18n";
 import { Sheet } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { TopicTree } from "@/components/knowledge/topic-tree";
@@ -34,20 +35,25 @@ function formatBytes(bytes: number): string {
 
 export function LibrarySheet({ open, onOpenChange, topics, manualFiles, manuals }: LibrarySheetProps) {
   const [tab, setTab] = useState<"library" | "history">("library");
+  const { t } = useLang();
+  const tabs = [
+    { id: "library" as const, label: t.tab_library },
+    { id: "history" as const, label: t.tab_history },
+  ];
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange} side="right" title="Library">
+    <Sheet open={open} onOpenChange={onOpenChange} side="right" title={t.library}>
       <div className="flex border-b border-border shrink-0">
-        {(["library", "history"] as const).map((t) => (
+        {tabs.map((tb) => (
           <button
-            key={t}
-            onClick={() => setTab(t)}
+            key={tb.id}
+            onClick={() => setTab(tb.id)}
             className={cn(
               "flex-1 py-2 text-[10px] font-mono uppercase tracking-wider transition-colors",
-              tab === t ? "text-foreground border-b-2 border-primary" : "text-muted-foreground hover:text-foreground"
+              tab === tb.id ? "text-foreground border-b-2 border-primary" : "text-muted-foreground hover:text-foreground"
             )}
           >
-            {t}
+            {tb.label}
           </button>
         ))}
       </div>
@@ -57,7 +63,7 @@ export function LibrarySheet({ open, onOpenChange, topics, manualFiles, manuals 
           <div className="p-4 space-y-6">
             <section>
               <h2 className="text-[10px] font-mono uppercase tracking-[0.15em] text-muted-foreground mb-2">
-                Internal Knowledge
+                {t.internal_knowledge}
               </h2>
               <div className="border border-border rounded-sm p-2">
                 <TopicTree topics={topics} />
@@ -67,7 +73,7 @@ export function LibrarySheet({ open, onOpenChange, topics, manualFiles, manuals 
             {manualFiles.length > 0 && (
               <section>
                 <h2 className="text-[10px] font-mono uppercase tracking-[0.15em] text-muted-foreground mb-2">
-                  Manuals Library ({manualFiles.length})
+                  {t.manuals_library} ({manualFiles.length})
                 </h2>
                 <div className="border border-border rounded-sm divide-y divide-border">
                   {manualFiles.map((f) => {
@@ -96,7 +102,7 @@ export function LibrarySheet({ open, onOpenChange, topics, manualFiles, manuals 
                           </a>
                           <p className="text-[10px] text-muted-foreground font-mono">
                             {formatBytes(f.size)}
-                            {ingested && <span className="ml-1.5 text-emerald-600">· indexed</span>}
+                            {ingested && <span className="ml-1.5 text-emerald-600">· {t.indexed}</span>}
                           </p>
                         </div>
                         <a

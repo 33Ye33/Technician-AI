@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Send } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import { useLang } from "@/i18n";
 import type { Tab } from "./types";
 
 interface ChatComposerProps {
@@ -12,16 +13,16 @@ interface ChatComposerProps {
 
 export function ChatComposer({ tab, loading, onSubmit }: ChatComposerProps) {
   const [text, setText] = useState("");
+  const { t } = useLang();
 
   function send() {
-    const t = text.trim();
-    if (!t || loading) return;
-    onSubmit(t);
+    const v = text.trim();
+    if (!v || loading) return;
+    onSubmit(v);
     setText("");
   }
 
-  const placeholder =
-    tab === "ask" ? "Ask about a spec or procedure..." : "Describe what you see on the line...";
+  const placeholder = tab === "ask" ? t.placeholder_ask : t.placeholder_diagnose;
 
   return (
     <div className="flex items-end gap-2 px-3 py-2.5">

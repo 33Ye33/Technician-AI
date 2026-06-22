@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { MessageSquare, Stethoscope } from "lucide-react";
 import { api } from "@/hooks/use-api";
+import { useLang } from "@/i18n";
 import { cn } from "@/lib/utils";
 import type { DiagnoseResponse, Topic } from "@/types/api";
 import { MobileTopBar } from "./mobile-top-bar";
@@ -141,9 +142,10 @@ export function MobileApp() {
 }
 
 function TabSwitcher({ tab, onChange }: { tab: Tab; onChange: (t: Tab) => void }) {
+  const { t } = useLang();
   const tabs: { id: Tab; label: string; Icon: typeof MessageSquare }[] = [
-    { id: "diagnose", label: "Diagnose", Icon: Stethoscope },
-    { id: "ask", label: "Quick Ask", Icon: MessageSquare },
+    { id: "diagnose", label: t.tab_diagnose, Icon: Stethoscope },
+    { id: "ask", label: t.tab_quick_ask, Icon: MessageSquare },
   ];
   return (
     <div className="flex items-center gap-1 p-1.5 border-b border-border">
