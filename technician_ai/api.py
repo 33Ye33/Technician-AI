@@ -193,6 +193,11 @@ class ConversationRatingRequest(BaseModel):
     comment: Optional[str] = None
 
 
+@app.get("/api/conversations")
+def api_list_conversations():
+    return {"conversations": db.list_conversations()}
+
+
 @app.post("/api/conversations/{conversation_id}/rating")
 def api_conversation_rating(conversation_id: int, body: ConversationRatingRequest):
     if not (1 <= body.rating <= 5):

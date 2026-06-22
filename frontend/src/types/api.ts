@@ -69,6 +69,15 @@ export interface DiagnoseHistoryTurn {
   step: number;
 }
 
+export interface AskConversation {
+  id: number;
+  question: string;
+  answer: string;
+  rating: number | null;
+  feedback_comment: string | null;
+  created_at: string;
+}
+
 export interface DiagnoseSession {
   session_id: string;
   machine: string | null;

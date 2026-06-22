@@ -326,6 +326,29 @@ def update_conversation_feedback_note(conversation_id: int, note: str | None) ->
         conn.close()
 
 
+def list_conversations(limit: int = 100) -> list[dict]:
+    conn = connect()
+    try:
+        rows = conn.execute(
+            """SELECT id, question, answer, rating, feedback_comment, created_at
+               FROM conversations ORDER BY created_at DESC LIMIT ?""",
+            (limit,),
+        ).fetchall()
+        return [
+            {
+                "id": r["id"],
+                "question": r["question"],
+                "answer": r["answer"],
+                "rating": r["rating"],
+                "feedback_comment": r["feedback_comment"],
+                "created_at": r["created_at"],
+            }
+            for r in rows
+        ]
+    finally:
+        conn.close()
+
+
 def get_conversation(conversation_id: int) -> dict | None:
     conn = connect()
     try:

@@ -1,4 +1,5 @@
 import type {
+  AskConversation,
   AskResponse,
   DiagnoseResponse,
   DiagnoseSession,
@@ -61,6 +62,9 @@ export const api = {
 
   diagnoseStep: (sessionId: string, answer: string) =>
     post<DiagnoseResponse>("/api/diagnose/step", { session_id: sessionId, answer }),
+
+  conversations: () =>
+    get<{ conversations: AskConversation[] }>("/api/conversations"),
 
   diagnoseSessions: () =>
     get<{ sessions: DiagnoseSession[] }>("/api/diagnose/sessions"),
