@@ -6,8 +6,11 @@ import { useLang } from "@/i18n";
 import type { AskConversation, DiagnoseSession } from "@/types/api";
 
 export function formatDate(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  const d = new Date(iso.includes("T") || iso.endsWith("Z") ? iso : iso + " UTC");
+  return d.toLocaleString("en-US", {
+    timeZone: "America/New_York",
+    month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+  });
 }
 
 function StarRow({ rating, comment }: { rating: number | null; comment: string | null }) {
