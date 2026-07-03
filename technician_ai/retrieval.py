@@ -504,6 +504,75 @@ def record_field_note(
     return {"id": doc_id}
 
 
+def record_structured_field_knowledge(
+    *,
+    symptom: str,
+    confirmed_fix: str,
+    machine: str | None = None,
+    component: str | None = None,
+    tried: str | None = None,
+    confidence: str | None = None,
+    technician_note: str | None = None,
+    source_conversation_id: int | None = None,
+) -> dict:
+    """Save a structured field-learning entry in the existing documents table."""
+    symptom = (symptom or "").strip()
+    confirmed_fix = (confirmed_fix or "").strip()
+    if not symptom or not confirmed_fix:
+        raise ValueError("symptom and confirmed_fix are required")
+
+    machine = (machine or "").strip()
+    component = (component or "").strip()
+    tried = (tried or "").strip()
+    technician_note = (technician_note or "").strip()
+    confidence = (confidence or "Not sure").strip()
+    if confidence not in {"Confirmed", "Suspected", "Not sure"}:
+        confidence = "Not sure"
+
+    text = "\n".join(
+        [
+            f"Machine: {machine}",
+            f"Component: {component}",
+            f"Symptom: {symptom}",
+            f"Tried: {tried}",
+            f"Confirmed Fix: {confirmed_fix}",
+            f"Confidence: {confidence}",
+            f"Technician Note: {technician_note}",
+        ]
+    )
+    embedding = (
+        embed_texts([text], input_type="document")[0] if EMBEDDINGS_ENABLED else None
+    )
+    tags = tagger.tag_content(
+        text,
+        source_label="(structured field knowledge)",
+        existing_topics=db.list_existing_topic_paths(),
+    )
+    metadata = {
+        "origin": "structured_field_knowledge",
+        "symptom": symptom,
+        "machine": machine,
+        "component": component,
+        "tried": tried,
+        "confirmed_fix": confirmed_fix,
+        "confidence": confidence,
+        "technician_note": technician_note,
+        "topic_path": tags["topic_path"],
+        "entry_type": tags["entry_type"],
+        "title": tags["title"],
+    }
+    if source_conversation_id is not None:
+        metadata["source_conversation_id"] = source_conversation_id
+
+    doc_id = db.insert_document(
+        kind="knowledge_entry",
+        text=text,
+        embedding=embedding,
+        metadata=metadata,
+    )
+    return {"id": doc_id, "text": text, "metadata": metadata}
+
+
 def _parse_decision(raw: str) -> dict:
     """Parse the agent's JSON decision, tolerating stray text around the object."""
     try:

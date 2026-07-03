@@ -40,6 +40,23 @@ export interface FeedbackResponse {
   message?: string;
 }
 
+export interface FieldKnowledgePayload {
+  symptom: string;
+  confirmed_fix: string;
+  machine?: string;
+  component?: string;
+  tried?: string;
+  confidence: "Confirmed" | "Suspected" | "Not sure";
+  technician_note?: string;
+  source_conversation_id?: number;
+}
+
+export interface FieldKnowledgeResponse {
+  id: number;
+  text: string;
+  metadata: Record<string, unknown>;
+}
+
 export interface Resolution {
   likely_cause: string;
   next_steps: string[];

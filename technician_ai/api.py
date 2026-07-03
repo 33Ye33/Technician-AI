@@ -188,6 +188,36 @@ def api_feedback(
     return entry
 
 
+@app.post("/api/field-knowledge")
+def api_field_knowledge(
+    symptom: str = Form(...),
+    confirmed_fix: str = Form(...),
+    machine: Optional[str] = Form(None),
+    component: Optional[str] = Form(None),
+    tried: Optional[str] = Form(None),
+    confidence: Optional[str] = Form("Not sure"),
+    technician_note: Optional[str] = Form(None),
+    source_conversation_id: Optional[int] = Form(None),
+):
+    symptom = symptom.strip()
+    confirmed_fix = confirmed_fix.strip()
+    if not symptom or not confirmed_fix:
+        raise HTTPException(
+            status_code=400,
+            detail="Problem/Symptom and What actually fixed it are required",
+        )
+    return rag.record_structured_field_knowledge(
+        symptom=symptom,
+        confirmed_fix=confirmed_fix,
+        machine=machine,
+        component=component,
+        tried=tried,
+        confidence=confidence,
+        technician_note=technician_note,
+        source_conversation_id=source_conversation_id,
+    )
+
+
 class ConversationRatingRequest(BaseModel):
     rating: int
     comment: Optional[str] = None

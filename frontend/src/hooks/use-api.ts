@@ -3,6 +3,8 @@ import type {
   AskResponse,
   DiagnoseResponse,
   DiagnoseSession,
+  FieldKnowledgePayload,
+  FieldKnowledgeResponse,
   FeedbackResponse,
   IngestResponse,
   KnowledgeEntry,
@@ -40,6 +42,22 @@ export const api = {
       kind,
       ...(note ? { note } : {}),
     }),
+
+  fieldKnowledge: (payload: FieldKnowledgePayload) => {
+    const body: Record<string, string> = {
+      symptom: payload.symptom,
+      confirmed_fix: payload.confirmed_fix,
+      confidence: payload.confidence,
+      ...(payload.machine ? { machine: payload.machine } : {}),
+      ...(payload.component ? { component: payload.component } : {}),
+      ...(payload.tried ? { tried: payload.tried } : {}),
+      ...(payload.technician_note ? { technician_note: payload.technician_note } : {}),
+      ...(payload.source_conversation_id != null
+        ? { source_conversation_id: String(payload.source_conversation_id) }
+        : {}),
+    };
+    return post<FieldKnowledgeResponse>("/api/field-knowledge", body);
+  },
 
   ingest: (file: File) => {
     const fd = new FormData();
