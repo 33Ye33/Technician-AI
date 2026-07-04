@@ -161,6 +161,7 @@ class PhotoQuestionFlowTests(unittest.TestCase):
         rag.assert_called_once_with(
             "What should I check?",
             "Alarm screen shows low vacuum alarm.",
+            step_by_step=False,
         )
         body = response.json()
         self.assertIn("Image observation:", body["answer"])

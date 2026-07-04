@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Camera, Send, X } from "lucide-react";
+import { Camera, ListChecks, Send, X } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { useLang } from "@/i18n";
@@ -8,12 +8,13 @@ import type { Tab } from "./types";
 interface ChatComposerProps {
   tab: Tab;
   loading: boolean;
-  onSubmit: (text: string, image?: File) => void;
+  onSubmit: (text: string, image?: File, stepByStep?: boolean) => void;
 }
 
 export function ChatComposer({ tab, loading, onSubmit }: ChatComposerProps) {
   const [text, setText] = useState("");
   const [image, setImage] = useState<File | null>(null);
+  const [stepByStep, setStepByStep] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const { t } = useLang();
@@ -32,7 +33,7 @@ export function ChatComposer({ tab, loading, onSubmit }: ChatComposerProps) {
   function send() {
     const v = text.trim();
     if (!v || loading) return;
-    onSubmit(v, canAttachPhoto ? image ?? undefined : undefined);
+    onSubmit(v, canAttachPhoto ? image ?? undefined : undefined, canAttachPhoto && stepByStep);
     setText("");
     setImage(null);
   }
@@ -63,6 +64,22 @@ export function ChatComposer({ tab, loading, onSubmit }: ChatComposerProps) {
             title={t.photo_remove}
           >
             <X className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      )}
+      {canAttachPhoto && (
+        <div className="mb-2">
+          <Button
+            type="button"
+            variant={stepByStep ? "secondary" : "ghost"}
+            size="sm"
+            disabled={loading}
+            className="h-7 rounded-full px-3 text-[11px] font-mono uppercase tracking-wider"
+            onClick={() => setStepByStep((v) => !v)}
+            aria-pressed={stepByStep}
+          >
+            <ListChecks className="h-3.5 w-3.5 mr-1.5" />
+            {t.step_by_step}
           </Button>
         </div>
       )}

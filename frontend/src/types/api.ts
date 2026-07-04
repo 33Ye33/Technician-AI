@@ -10,9 +10,25 @@ export interface AskResponse {
   answer: string;
   sources: Source[];
   conversation_id: number;
+  mode?: "normal" | "step_by_step";
+  procedure?: StepProcedure;
   image_observation?: string;
   is_safety_critical?: boolean;
   hazard_type?: string | null;
+}
+
+export interface StepProcedure {
+  safety_first: string[];
+  tools_needed: string[];
+  steps: StepProcedureStep[];
+  expected_result: string;
+  stop_and_ask_supervisor: string[];
+}
+
+export interface StepProcedureStep {
+  title?: string;
+  instruction: string;
+  expected_result?: string;
 }
 
 export interface KnowledgeEntry {

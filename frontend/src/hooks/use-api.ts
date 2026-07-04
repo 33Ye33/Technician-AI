@@ -35,12 +35,17 @@ async function httpDelete<T>(url: string): Promise<T> {
 }
 
 export const api = {
-  ask: (question: string) => post<AskResponse>("/api/ask", { question }),
+  ask: (question: string, stepByStep = false) =>
+    post<AskResponse>("/api/ask", {
+      question,
+      ...(stepByStep ? { step_by_step: "true" } : {}),
+    }),
 
-  askPhoto: (question: string, image: File) => {
+  askPhoto: (question: string, image: File, stepByStep = false) => {
     const fd = new FormData();
     fd.append("question", question);
     fd.append("image", image);
+    if (stepByStep) fd.append("step_by_step", "true");
     return post<AskResponse>("/api/ask/photo", fd);
   },
 

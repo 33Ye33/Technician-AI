@@ -73,6 +73,14 @@ const translations = {
     btn_quick_ask: "Quick Ask",
     photo_attach: "Attach photo",
     photo_remove: "Remove photo",
+    step_by_step: "Step-by-step",
+    procedure_safety: "Safety first",
+    procedure_tools: "Tools needed",
+    procedure_steps: "Steps",
+    procedure_expected: "Expected result",
+    procedure_stop: "Stop and ask a supervisor",
+    image_observation: "Image observation",
+    image_observation_disclaimer: "This image observation is AI-generated and is not a confirmed diagnosis.",
 
     // History
     loading: "Loading...",
@@ -206,6 +214,14 @@ const translations = {
     btn_quick_ask: "快速问答",
     photo_attach: "添加照片",
     photo_remove: "移除照片",
+    step_by_step: "分步骤",
+    procedure_safety: "安全优先",
+    procedure_tools: "所需工具",
+    procedure_steps: "步骤",
+    procedure_expected: "预期结果",
+    procedure_stop: "停止并询问主管",
+    image_observation: "图像观察",
+    image_observation_disclaimer: "图像观察由 AI 根据照片生成，并不是已确认的诊断结论。",
 
     // History
     loading: "加载中...",
