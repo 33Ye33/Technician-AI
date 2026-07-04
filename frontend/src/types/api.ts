@@ -10,6 +10,9 @@ export interface AskResponse {
   answer: string;
   sources: Source[];
   conversation_id: number;
+  image_observation?: string;
+  is_safety_critical?: boolean;
+  hazard_type?: string | null;
 }
 
 export interface KnowledgeEntry {

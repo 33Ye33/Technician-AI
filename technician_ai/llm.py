@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import re
+import base64
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -198,6 +199,85 @@ def _extract_json_fallback(text: str) -> str:
         except json.JSONDecodeError:
             pass
     return text
+
+
+def describe_image(
+    image_bytes: bytes,
+    mime_type: str,
+    prompt: str,
+    model: str | None = None,
+    max_tokens: int = 512,
+) -> str:
+    """Describe an uploaded technician photo using the configured vision model."""
+    model = model or os.environ.get("TECHNICIAN_AI_VISION_MODEL") or os.environ.get(
+        "TECHNICIAN_AI_MODEL", "gpt-4o"
+    )
+
+    if LLM_PROVIDER == "anthropic":
+        client = _get_client()
+        img_b64 = base64.b64encode(image_bytes).decode()
+        response = client.messages.create(
+            model=model,
+            max_tokens=max_tokens,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": mime_type,
+                                "data": img_b64,
+                            },
+                        },
+                        {"type": "text", "text": prompt},
+                    ],
+                }
+            ],
+        )
+        return next((b.text for b in response.content if b.type == "text"), "").strip()
+    elif LLM_PROVIDER == "openai":
+        client = _get_client()
+        img_b64 = base64.b64encode(image_bytes).decode()
+        response = client.chat.completions.create(
+            model=model,
+            max_tokens=max_tokens,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:{mime_type};base64,{img_b64}",
+                            },
+                        },
+                        {"type": "text", "text": prompt},
+                    ],
+                }
+            ],
+        )
+        return (response.choices[0].message.content or "").strip()
+    elif LLM_PROVIDER == "google":
+        from google.genai import types
+
+        client = _get_client()
+        response = client.models.generate_content(
+            model=model,
+            config=types.GenerateContentConfig(max_output_tokens=max_tokens),
+            contents=[
+                types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
+                prompt,
+            ],
+        )
+        return (response.text or "").strip()
+    else:
+        raise RuntimeError(
+            f"Unknown LLM_PROVIDER={LLM_PROVIDER!r}. "
+            "Set LLM_PROVIDER to 'anthropic', 'openai', or 'google', "
+            "or set the corresponding API key env var."
+        )
 
 
 def chat(
