@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from . import database as db
 from . import diagnosis as diagnosis_fsm
 from . import ingestion as ingest
+from . import llm as llm_client
 from . import retrieval as rag
 from . import safety as safety_gate
 
@@ -36,6 +37,16 @@ _MACHINE_NAMES: list[str] = [name for _, name in _MACHINE_DISPLAY]
 # After this many assistant turns without a resolution, nudge the agent to
 # conclude with an escalation recommendation (soft cap, configurable).
 DIAGNOSE_ESCALATE_AFTER = int(os.environ.get("DIAGNOSE_ESCALATE_AFTER", "8"))
+PHOTO_ALLOWED_MIME_TYPES = {"image/jpeg", "image/png", "image/webp"}
+PHOTO_MAX_BYTES = int(os.environ.get("PHOTO_ASK_MAX_BYTES", str(8 * 1024 * 1024)))
+PHOTO_OBSERVATION_PROMPT = (
+    "You are helping a factory technician. Describe only what is visibly present "
+    "in this photo that may matter for troubleshooting or safety. Mention visible "
+    "machine labels, alarm text, damaged parts, leaks, smoke, sparks, broken glass, "
+    "people near or inside equipment, exposed wires, and work-area hazards if present. "
+    "Do not diagnose the root cause. Do not invent details that are not visible. "
+    "Return concise plain text."
+)
 
 
 def _detect_machine(query: str) -> str | None:
@@ -158,6 +169,52 @@ def api_ask(question: str = Form(...)):
     if not question:
         raise HTTPException(status_code=400, detail="empty question")
     return rag.answer_question(question)
+
+
+@app.post("/api/ask/photo")
+async def api_ask_photo(
+    question: str = Form(...),
+    image: UploadFile = File(...),
+):
+    question = question.strip()
+    if not question:
+        raise HTTPException(status_code=400, detail="empty question")
+
+    content_type = (image.content_type or "").lower()
+    if content_type not in PHOTO_ALLOWED_MIME_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail="unsupported image type",
+        )
+
+    hazard = safety_gate.classify_safety_critical(question)
+    if hazard is not None:
+        answer = safety_gate.build_safety_response(hazard)
+        conversation_id = db.insert_conversation(question, answer, [])
+        return {
+            "answer": answer,
+            "sources": [],
+            "conversation_id": conversation_id,
+            "is_safety_critical": True,
+            "hazard_type": hazard,
+        }
+
+    image_bytes = await image.read()
+    if len(image_bytes) > PHOTO_MAX_BYTES:
+        raise HTTPException(status_code=400, detail="image too large")
+
+    try:
+        observation = llm_client.describe_image(
+            image_bytes=image_bytes,
+            mime_type=content_type,
+            prompt=PHOTO_OBSERVATION_PROMPT,
+        )
+    except RuntimeError:
+        raise HTTPException(
+            status_code=503,
+            detail="Photo questions require a vision-capable LLM provider/model.",
+        )
+    return rag.answer_photo_question(question, observation)
 
 
 @app.post("/api/feedback/{conversation_id}")

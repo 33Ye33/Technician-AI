@@ -422,6 +422,82 @@ def answer_question(question: str) -> dict:
     }
 
 
+def answer_photo_question(question: str, image_observation: str) -> dict:
+    """Answer a technician question using a generated image observation plus RAG."""
+    image_observation = (image_observation or "").strip()
+    combined_question = (
+        f"User question: {question}\n\n"
+        f"Image observation: {image_observation}\n\n"
+        "The image observation is AI-generated from the uploaded photo and is not a confirmed diagnosis."
+    )
+    observation_prefix = (
+        f"Image observation:\n{image_observation or '(no clear observation generated)'}\n\n"
+        "_This image observation is AI-generated from the uploaded photo and is not a confirmed diagnosis._\n\n"
+    )
+
+    hazard_type = safety_gate.classify_safety_critical(image_observation)
+    if hazard_type is not None:
+        answer = observation_prefix + safety_gate.build_safety_response(hazard_type)
+        conv_id = db.insert_conversation(combined_question, answer, [])
+        return {
+            "answer": answer,
+            "sources": [],
+            "conversation_id": conv_id,
+            "is_safety_critical": True,
+            "hazard_type": hazard_type,
+            "image_observation": image_observation,
+        }
+
+    if EMBEDDINGS_ENABLED:
+        query_vec = embed_query(combined_question)
+        snippets = db.search_similar(query_vec, k=TOP_K)
+    else:
+        snippets = db.search_by_keywords(combined_question, k=TOP_K)
+
+    if not snippets:
+        answer = (
+            observation_prefix
+            + "I don't have any manuals or field notes ingested yet. Run `python ingest.py <pdf>` to load a manual."
+        )
+        conv_id = db.insert_conversation(combined_question, answer, [])
+        return {
+            "answer": answer,
+            "sources": [],
+            "conversation_id": conv_id,
+            "image_observation": image_observation,
+        }
+
+    sources_block = _format_sources(snippets)
+    user_message = f"Sources:\n\n{sources_block}\n\n---\n\nQuestion: {combined_question}"
+
+    answer_body = llm_client.chat(
+        system=ANSWER_SYSTEM_PROMPT,
+        user_message=user_message,
+        model=ANSWER_MODEL,
+        max_tokens=2048,
+        cache_system=True,
+    )
+    answer = observation_prefix + grounding_guard(answer_body)
+    doc_ids = [s["id"] for s in snippets]
+    conv_id = db.insert_conversation(combined_question, answer, doc_ids)
+
+    return {
+        "answer": answer,
+        "sources": [
+            {
+                "index": i + 1,
+                "id": s["id"],
+                "kind": s["kind"],
+                "metadata": s["metadata"],
+                "preview": s["text"][:200],
+            }
+            for i, s in enumerate(snippets)
+        ],
+        "conversation_id": conv_id,
+        "image_observation": image_observation,
+    }
+
+
 def structure_knowledge_entry(question: str, prior_answer: str, technician_note: str) -> dict:
     user_message = (
         f"Original question: {question}\n\n"

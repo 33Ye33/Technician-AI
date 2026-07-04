@@ -71,6 +71,8 @@ const translations = {
     ask_enter_hint: "ENTER TO SEND · SHIFT+ENTER NEW LINE",
     btn_diagnose: "Diagnose",
     btn_quick_ask: "Quick Ask",
+    photo_attach: "Attach photo",
+    photo_remove: "Remove photo",
 
     // History
     loading: "Loading...",
@@ -202,6 +204,8 @@ const translations = {
     ask_enter_hint: "回车发送 · Shift+回车换行",
     btn_diagnose: "故障诊断",
     btn_quick_ask: "快速问答",
+    photo_attach: "添加照片",
+    photo_remove: "移除照片",
 
     // History
     loading: "加载中...",

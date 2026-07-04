@@ -62,11 +62,11 @@ export function MobileApp() {
     topicBuckets: topics.length,
   };
 
-  async function handleAsk(text: string) {
+  async function handleAsk(text: string, image?: File) {
     setAskMsgs((m) => [...m, { role: "user", text }]);
     setLoading(true);
     try {
-      const data = await api.ask(text);
+      const data = image ? await api.askPhoto(text, image) : await api.ask(text);
       setAskMsgs((m) => [...m, { role: "assistant", data }]);
     } catch (err) {
       setAskMsgs((m) => [

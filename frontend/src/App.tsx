@@ -56,11 +56,11 @@ export default function App() {
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  async function handleAsk(question: string) {
+  async function handleAsk(question: string, image?: File) {
     setLoading(true);
     setResult(null);
     try {
-      const data = await api.ask(question);
+      const data = image ? await api.askPhoto(question, image) : await api.ask(question);
       setResult({ kind: "ask", data, question });
     } catch (err) {
       setResult({
