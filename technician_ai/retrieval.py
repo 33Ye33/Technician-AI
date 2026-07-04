@@ -99,6 +99,46 @@ Rules:
 4. Lead with the answer. Keep it short. Skip the preamble. Never use formal phrases like "根据手册", "建议您", "请注意" — just say it plainly.
 5. Never invent part numbers, torque specs, or measurements. If a precise value isn't in the sources, say so."""
 
+STEP_PROCEDURE_SYSTEM_PROMPT = ANSWER_SYSTEM_PROMPT + """
+
+STEP-BY-STEP MODE:
+Return a single JSON object only. Build a structured check/repair procedure for a technician.
+Do not invent repair instructions beyond the retrieved manuals, SOPs, field knowledge, or user-provided context.
+If the sources do not support a repair action, keep the steps to safe inspection/checks and add a stop-and-ask-supervisor item.
+Include citations such as [#1] inside the relevant field values when source snippets support the instruction.
+The JSON must include: safety_first, tools_needed, steps, expected_result, stop_and_ask_supervisor."""
+
+STEP_PROCEDURE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "safety_first": {"type": "array", "items": {"type": "string"}},
+        "tools_needed": {"type": "array", "items": {"type": "string"}},
+        "steps": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string"},
+                    "instruction": {"type": "string"},
+                    "expected_result": {"type": "string"},
+                },
+                "required": ["title", "instruction", "expected_result"],
+                "additionalProperties": False,
+            },
+        },
+        "expected_result": {"type": "string"},
+        "stop_and_ask_supervisor": {"type": "array", "items": {"type": "string"}},
+    },
+    "required": [
+        "safety_first",
+        "tools_needed",
+        "steps",
+        "expected_result",
+        "stop_and_ask_supervisor",
+    ],
+    "additionalProperties": False,
+}
+
 DIAGNOSE_SYSTEM_PROMPT = """You are Technician AI, a friendly and experienced colleague helping a factory technician figure out what's wrong with their equipment, one step at a time.
 
 Sound like a real person on the shop floor — someone who's seen these problems before. Use plain everyday words, not textbook language. Short sentences. Ask one simple question at a time — don't pile on multiple questions at once. When you find the root cause, explain it the way you'd explain it to a coworker standing next to you, not like you're writing a report. Never mention the manual, documentation, or any source by name in your response text — use what you know from the sources, but don't say "according to the manual" or "consistent with the manual".
@@ -357,6 +397,103 @@ def grounding_guard(response: str) -> str:
     return response
 
 
+def _source_refs(snippets: list[dict]) -> list[dict]:
+    return [
+        {
+            "index": i + 1,
+            "id": s["id"],
+            "kind": s["kind"],
+            "metadata": s["metadata"],
+            "preview": s["text"][:200],
+        }
+        for i, s in enumerate(snippets)
+    ]
+
+
+def _as_text_list(value) -> list[str]:
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    if isinstance(value, str) and value.strip():
+        return [value.strip()]
+    return []
+
+
+def _normalize_procedure(raw: dict) -> dict:
+    fallback = ["Not specified in the retrieved sources."]
+    steps = []
+    for item in raw.get("steps", []):
+        if not isinstance(item, dict):
+            continue
+        instruction = str(item.get("instruction", "")).strip()
+        if not instruction:
+            continue
+        steps.append(
+            {
+                "title": str(item.get("title", "")).strip(),
+                "instruction": instruction,
+                "expected_result": str(item.get("expected_result", "")).strip(),
+            }
+        )
+
+    procedure = {
+        "safety_first": _as_text_list(raw.get("safety_first")) or fallback,
+        "tools_needed": _as_text_list(raw.get("tools_needed")) or fallback,
+        "steps": steps,
+        "expected_result": str(raw.get("expected_result", "")).strip(),
+        "stop_and_ask_supervisor": _as_text_list(raw.get("stop_and_ask_supervisor")) or fallback,
+    }
+    if not procedure["steps"] and not procedure["expected_result"]:
+        raise ValueError("structured procedure is empty")
+    return procedure
+
+
+def _format_bullets(items: list[str]) -> list[str]:
+    return [f"- {item}" for item in items]
+
+
+def _render_step_procedure_markdown(procedure: dict) -> str:
+    lines = ["## Safety first", ""]
+    lines.extend(_format_bullets(procedure["safety_first"]))
+    lines.extend(["", "## Tools needed", ""])
+    lines.extend(_format_bullets(procedure["tools_needed"]))
+    lines.extend(["", "## Steps", ""])
+    for i, step in enumerate(procedure["steps"], start=1):
+        title = f" — {step['title']}" if step.get("title") else ""
+        lines.append(f"{i}. **Step {i}{title}:** {step['instruction']}")
+        if step.get("expected_result"):
+            lines.append(f"   Expected result: {step['expected_result']}")
+    lines.extend(["", "## Expected result", "", procedure["expected_result"] or "Not specified in the retrieved sources."])
+    lines.extend(["", "## When to stop and ask a supervisor", ""])
+    lines.extend(_format_bullets(procedure["stop_and_ask_supervisor"]))
+    return "\n".join(lines)
+
+
+def _generate_answer_body(user_message: str, step_by_step: bool) -> tuple[str, dict | None]:
+    if step_by_step:
+        try:
+            raw = llm_client.chat(
+                system=STEP_PROCEDURE_SYSTEM_PROMPT,
+                user_message=user_message,
+                model=ANSWER_MODEL,
+                max_tokens=2048,
+                json_schema=STEP_PROCEDURE_SCHEMA,
+                cache_system=True,
+            )
+            procedure = _normalize_procedure(json.loads(raw))
+            return _render_step_procedure_markdown(procedure), procedure
+        except (json.JSONDecodeError, TypeError, ValueError, KeyError):
+            pass
+
+    answer = llm_client.chat(
+        system=ANSWER_SYSTEM_PROMPT,
+        user_message=user_message,
+        model=ANSWER_MODEL,
+        max_tokens=2048,
+        cache_system=True,
+    )
+    return answer, None
+
+
 def _activate_safety_hold(session: dict | None, hazard_type: str) -> None:
     """Move an existing diagnosis session into safety hold."""
     if session is None:
@@ -368,7 +505,7 @@ def _activate_safety_hold(session: dict | None, hazard_type: str) -> None:
     session["safety_confirmed"] = False
 
 
-def answer_question(question: str) -> dict:
+def answer_question(question: str, step_by_step: bool = False) -> dict:
     hazard_type = safety_gate.classify_safety_critical(question)
     if hazard_type is not None:
         answer = safety_gate.build_safety_response(hazard_type)
@@ -395,34 +532,25 @@ def answer_question(question: str) -> dict:
     sources_block = _format_sources(snippets)
     user_message = f"Sources:\n\n{sources_block}\n\n---\n\nQuestion: {question}"
 
-    answer = llm_client.chat(
-        system=ANSWER_SYSTEM_PROMPT,
-        user_message=user_message,
-        model=ANSWER_MODEL,
-        max_tokens=2048,
-        cache_system=True,
-    )
+    answer, procedure = _generate_answer_body(user_message, step_by_step)
     answer = grounding_guard(answer)
     doc_ids = [s["id"] for s in snippets]
     conv_id = db.insert_conversation(question, answer, doc_ids)
 
-    return {
+    result = {
         "answer": answer,
-        "sources": [
-            {
-                "index": i + 1,
-                "id": s["id"],
-                "kind": s["kind"],
-                "metadata": s["metadata"],
-                "preview": s["text"][:200],
-            }
-            for i, s in enumerate(snippets)
-        ],
+        "sources": _source_refs(snippets),
         "conversation_id": conv_id,
     }
+    if procedure is not None:
+        result["mode"] = "step_by_step"
+        result["procedure"] = procedure
+    return result
 
 
-def answer_photo_question(question: str, image_observation: str) -> dict:
+def answer_photo_question(
+    question: str, image_observation: str, step_by_step: bool = False
+) -> dict:
     """Answer a technician question using a generated image observation plus RAG."""
     image_observation = (image_observation or "").strip()
     combined_question = (
@@ -470,32 +598,21 @@ def answer_photo_question(question: str, image_observation: str) -> dict:
     sources_block = _format_sources(snippets)
     user_message = f"Sources:\n\n{sources_block}\n\n---\n\nQuestion: {combined_question}"
 
-    answer_body = llm_client.chat(
-        system=ANSWER_SYSTEM_PROMPT,
-        user_message=user_message,
-        model=ANSWER_MODEL,
-        max_tokens=2048,
-        cache_system=True,
-    )
+    answer_body, procedure = _generate_answer_body(user_message, step_by_step)
     answer = observation_prefix + grounding_guard(answer_body)
     doc_ids = [s["id"] for s in snippets]
     conv_id = db.insert_conversation(combined_question, answer, doc_ids)
 
-    return {
+    result = {
         "answer": answer,
-        "sources": [
-            {
-                "index": i + 1,
-                "id": s["id"],
-                "kind": s["kind"],
-                "metadata": s["metadata"],
-                "preview": s["text"][:200],
-            }
-            for i, s in enumerate(snippets)
-        ],
+        "sources": _source_refs(snippets),
         "conversation_id": conv_id,
         "image_observation": image_observation,
     }
+    if procedure is not None:
+        result["mode"] = "step_by_step"
+        result["procedure"] = procedure
+    return result
 
 
 def structure_knowledge_entry(question: str, prior_answer: str, technician_note: str) -> dict:

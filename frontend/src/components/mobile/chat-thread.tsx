@@ -5,6 +5,7 @@ import { Markdown } from "@/components/shared/markdown";
 import { SourceList } from "@/components/ask/source-list";
 import { FeedbackWidget } from "@/components/ask/feedback-widget";
 import { ResolutionCard } from "@/components/ask/resolution-card";
+import { ProcedureCards } from "@/components/ask/procedure-cards";
 import { DiagnoseRatingWidget } from "@/components/diagnose-rating-widget";
 import { Spinner } from "@/components/shared/spinner";
 import { ProductActionCards } from "@/components/shared/product-action-cards";
@@ -110,7 +111,24 @@ function AskBubble({ msg }: { msg: AskMessage }) {
           {data.sources.length} {t.label_sources}
         </span>
       </div>
-      <Markdown>{data.answer}</Markdown>
+      {data.procedure ? (
+        <div className="space-y-2.5">
+          {data.image_observation && (
+            <div className="rounded-lg border border-border bg-background/50 p-3">
+              <p className="mb-1 text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+                {t.image_observation}
+              </p>
+              <p className="text-sm leading-relaxed text-foreground">{data.image_observation}</p>
+              <p className="mt-1.5 text-xs italic text-muted-foreground">
+                {t.image_observation_disclaimer}
+              </p>
+            </div>
+          )}
+          <ProcedureCards procedure={data.procedure} />
+        </div>
+      ) : (
+        <Markdown>{data.answer}</Markdown>
+      )}
       <SourceList sources={data.sources} />
       {data.conversation_id > 0 && <FeedbackWidget conversationId={data.conversation_id} hideAddNote />}
       {data.conversation_id > 0 && <DiagnoseRatingWidget conversationId={data.conversation_id} />}

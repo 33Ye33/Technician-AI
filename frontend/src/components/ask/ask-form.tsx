@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { Camera, Send, Stethoscope, X } from "lucide-react";
+import { Camera, ListChecks, Send, Stethoscope, X } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { useLang } from "@/i18n";
 
 interface AskFormProps {
-  onSubmit: (question: string, image?: File) => void;
+  onSubmit: (question: string, image?: File, stepByStep?: boolean) => void;
   onDiagnose: (question: string) => void;
   loading: boolean;
 }
@@ -15,6 +15,7 @@ export function AskForm({ onSubmit, onDiagnose, loading }: AskFormProps) {
   const [question, setQuestion] = useState("");
   const [image, setImage] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [stepByStep, setStepByStep] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -31,7 +32,7 @@ export function AskForm({ onSubmit, onDiagnose, loading }: AskFormProps) {
     e.preventDefault();
     const q = question.trim();
     if (!q || loading) return;
-    onSubmit(q, image ?? undefined);
+    onSubmit(q, image ?? undefined, stepByStep);
   }
 
   function handleDiagnose() {
@@ -87,6 +88,19 @@ export function AskForm({ onSubmit, onDiagnose, loading }: AskFormProps) {
           {t.ask_enter_hint}
         </span>
         <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant={stepByStep ? "secondary" : "ghost"}
+            disabled={loading}
+            size="sm"
+            className="h-7 px-2.5 font-mono text-[11px] uppercase tracking-wider"
+            onClick={() => setStepByStep((v) => !v)}
+            aria-pressed={stepByStep}
+            title={t.step_by_step}
+          >
+            <ListChecks className="h-3.5 w-3.5 mr-1.5" />
+            {t.step_by_step}
+          </Button>
           <input
             ref={imageInputRef}
             type="file"

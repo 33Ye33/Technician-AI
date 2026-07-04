@@ -164,17 +164,18 @@ def topics():
 # --- JSON API for React SPA ---
 
 @app.post("/api/ask")
-def api_ask(question: str = Form(...)):
+def api_ask(question: str = Form(...), step_by_step: bool = Form(False)):
     question = question.strip()
     if not question:
         raise HTTPException(status_code=400, detail="empty question")
-    return rag.answer_question(question)
+    return rag.answer_question(question, step_by_step=step_by_step)
 
 
 @app.post("/api/ask/photo")
 async def api_ask_photo(
     question: str = Form(...),
     image: UploadFile = File(...),
+    step_by_step: bool = Form(False),
 ):
     question = question.strip()
     if not question:
@@ -214,7 +215,7 @@ async def api_ask_photo(
             status_code=503,
             detail="Photo questions require a vision-capable LLM provider/model.",
         )
-    return rag.answer_photo_question(question, observation)
+    return rag.answer_photo_question(question, observation, step_by_step=step_by_step)
 
 
 @app.post("/api/feedback/{conversation_id}")

@@ -56,11 +56,13 @@ export default function App() {
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  async function handleAsk(question: string, image?: File) {
+  async function handleAsk(question: string, image?: File, stepByStep = false) {
     setLoading(true);
     setResult(null);
     try {
-      const data = image ? await api.askPhoto(question, image) : await api.ask(question);
+      const data = image
+        ? await api.askPhoto(question, image, stepByStep)
+        : await api.ask(question, stepByStep);
       setResult({ kind: "ask", data, question });
     } catch (err) {
       setResult({
