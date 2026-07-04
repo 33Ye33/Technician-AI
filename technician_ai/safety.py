@@ -38,6 +38,9 @@ SAFETY_TRIGGERS: dict[str, list[str]] = {
         "panel shattered",
         "pane broke",
         "pane shattered",
+        "碎玻璃",
+        "玻璃碎了",
+        "玻璃渣",
     ],
     "electrical_hazard": [
         "electrical hazard",
@@ -64,6 +67,10 @@ SAFETY_TRIGGERS: dict[str, list[str]] = {
         "de-energized",
         "deenergize",
         "needs to be de-energized",
+        "火花",
+        "裸露电线",
+        "带电电线",
+        "漏电",
     ],
     "chemical_hazard": [
         "chemical spill",
@@ -86,6 +93,8 @@ SAFETY_TRIGGERS: dict[str, list[str]] = {
         "msds",
         "sds sheet",
         "toxic vapor",
+        "化学品泄漏",
+        "化学品洒了",
     ],
     "pneumatic_hazard": [
         "moved suddenly",
@@ -113,6 +122,8 @@ SAFETY_TRIGGERS: dict[str, list[str]] = {
         "machine lurched",
         "arm moved suddenly",
         "robot moved suddenly",
+        "机器突然移动",
+        "机械臂突然动了",
     ],
     "crush_pinch_hazard": [
         "crush hazard",
@@ -134,6 +145,18 @@ SAFETY_TRIGGERS: dict[str, list[str]] = {
         "press hazard",
         "laminator pinch",
         "conveyor pinch",
+        "personnel inside machine",
+        "personnel inside the machine",
+        "someone inside machine",
+        "someone inside the machine",
+        "person inside machine",
+        "person inside the machine",
+        "someone reaching inside",
+        "someone reaching into",
+        "reaching inside machine",
+        "reaching into machine",
+        "有人在机器里面",
+        "有人伸手进去",
     ],
     "fire_hazard": [
         "fire",
@@ -154,6 +177,9 @@ SAFETY_TRIGGERS: dict[str, list[str]] = {
         "evacuation",
         "fire alarm",
         "fire suppression",
+        "冒烟",
+        "烧焦味",
+        "起火",
     ],
     "fall_hazard": [
         "fall hazard",
@@ -174,6 +200,36 @@ SAFETY_TRIGGERS: dict[str, list[str]] = {
         "slippery floor",
         "trip hazard",
         "tripping hazard",
+    ],
+    "injury_hazard": [
+        "injury",
+        "injured",
+        "bleeding",
+        "got cut",
+        "cut hand",
+        "cut finger",
+        "cut arm",
+        "cut myself",
+        "burned",
+        "burnt",
+        "burn injury",
+        "受伤",
+        "流血",
+        "烫伤",
+        "割伤",
+    ],
+    "emergency_stop_unknown": [
+        "emergency stop",
+        "e-stop",
+        "estop",
+        "e stop",
+        "unknown e-stop",
+        "unknown estop",
+        "e-stop cause unknown",
+        "machine stopped unexpectedly",
+        "stopped unexpectedly",
+        "急停",
+        "紧急停止",
     ],
 }
 
@@ -796,6 +852,28 @@ SAFETY_ACTIONS: dict[str, dict] = {
         "safety_question": (
             "Is proper fall protection (harness, guardrails, or equivalent) "
             "in place and inspected before you proceed with elevated work?"
+        ),
+    },
+    "injury_hazard": {
+        "summary": (
+            "A possible injury has been reported. Stop troubleshooting until the "
+            "person is out of immediate danger and the incident is handled."
+        ),
+        "immediate_actions": [],
+        "safety_question": (
+            "Is the injured person out of immediate danger, and has medical help, "
+            "a supervisor, or EHS been contacted as needed?"
+        ),
+    },
+    "emergency_stop_unknown": {
+        "summary": (
+            "An Emergency Stop or unexpected machine stop has been reported. "
+            "Treat the machine as unsafe until the cause is understood."
+        ),
+        "immediate_actions": [],
+        "safety_question": (
+            "Is the machine stopped, are all personnel clear, and has the cause "
+            "of the Emergency Stop or unexpected stop been made safe?"
         ),
     },
 }
