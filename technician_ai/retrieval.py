@@ -357,7 +357,30 @@ def grounding_guard(response: str) -> str:
     return response
 
 
+def _activate_safety_hold(session: dict | None, hazard_type: str) -> None:
+    """Move an existing diagnosis session into safety hold."""
+    if session is None:
+        return
+    session["state"] = diagnosis_fsm.STATE_SAFETY_CHECK
+    session["is_safety_critical"] = True
+    session["hazard_type"] = hazard_type
+    session["prerequisites"] = safety_gate.init_prerequisites(hazard_type)
+    session["safety_confirmed"] = False
+
+
 def answer_question(question: str) -> dict:
+    hazard_type = safety_gate.classify_safety_critical(question)
+    if hazard_type is not None:
+        answer = safety_gate.build_safety_response(hazard_type)
+        conv_id = db.insert_conversation(question, answer, [])
+        return {
+            "answer": answer,
+            "sources": [],
+            "conversation_id": conv_id,
+            "is_safety_critical": True,
+            "hazard_type": hazard_type,
+        }
+
     if EMBEDDINGS_ENABLED:
         query_vec = embed_query(question)
         snippets = db.search_similar(query_vec, k=TOP_K)
@@ -752,6 +775,35 @@ def diagnose_step(
                     "identified_machine": None,
                     "is_safety_critical": True,
                     "hazard_type": hazard,
+                    "sources": [],
+                    "conversation_id": None,
+                }
+
+    # ------------------------------------------------------------------
+    # 1c. Mid-session safety gate — if a previously normal diagnosis gets a
+    #     new hazard report, enter SAFETY_HOLD before retrieval or LLM use.
+    # ------------------------------------------------------------------
+    if (
+        not is_first_turn
+        and (session is None or not session.get("is_safety_critical"))
+    ):
+        latest_user = next(
+            (m["content"] for m in reversed(history) if m["role"] == "user"),
+            "",
+        )
+        if latest_user:
+            hazard_type = safety_gate.classify_safety_critical(latest_user)
+            if hazard_type is not None:
+                _activate_safety_hold(session, hazard_type)
+                return {
+                    "message": safety_gate.build_safety_response(hazard_type),
+                    "is_resolved": False,
+                    "resolution": None,
+                    "phase": "safety_hold",
+                    "machine": machine,
+                    "identified_machine": None,
+                    "is_safety_critical": True,
+                    "hazard_type": hazard_type,
                     "sources": [],
                     "conversation_id": None,
                 }
