@@ -2,12 +2,14 @@ import { useState, useRef } from "react";
 import { Upload, FileText, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { api } from "@/hooks/use-api";
+import { useLang } from "@/i18n";
 
 interface UploadFormProps {
   onComplete: () => void;
 }
 
 export function UploadForm({ onComplete }: UploadFormProps) {
+  const { t } = useLang();
   const [status, setStatus] = useState<"idle" | "uploading" | "done" | "error">("idle");
   const [message, setMessage] = useState("");
   const [dragOver, setDragOver] = useState(false);
@@ -57,7 +59,7 @@ export function UploadForm({ onComplete }: UploadFormProps) {
         <>
           <Upload className="h-6 w-6 mx-auto mb-2 text-muted-foreground" />
           <p className="text-xs text-muted-foreground mb-2">
-            Drop a PDF, PPTX, DOCX, or Excel here
+            {t.upload_drop_hint}
           </p>
           <Button
             variant="secondary"
@@ -65,7 +67,7 @@ export function UploadForm({ onComplete }: UploadFormProps) {
             onClick={() => inputRef.current?.click()}
           >
             <FileText className="h-3.5 w-3.5 mr-1.5" />
-            Choose File
+            {t.choose_file}
           </Button>
         </>
       )}
@@ -86,7 +88,7 @@ export function UploadForm({ onComplete }: UploadFormProps) {
             {message}
           </div>
           <Button variant="ghost" size="sm" onClick={() => { setStatus("idle"); setMessage(""); }}>
-            Upload another
+            {t.upload_another}
           </Button>
         </div>
       )}
