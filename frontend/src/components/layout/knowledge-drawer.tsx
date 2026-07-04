@@ -6,6 +6,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { DiagnoseHistory } from "@/components/diagnose-history";
 import { cn } from "@/lib/utils";
 import { api } from "@/hooks/use-api";
+import { useLang } from "@/i18n";
 import type { Topic } from "@/types/api";
 
 interface Manual { title: string; chunks: number; source_path: string; }
@@ -14,6 +15,8 @@ interface ManualFile { name: string; size: number; url: string; }
 interface KnowledgeDrawerProps {
   topics: Topic[];
   onUploadComplete: () => void;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 function formatBytes(bytes: number): string {
@@ -22,12 +25,15 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export function KnowledgeDrawer({ topics, onUploadComplete }: KnowledgeDrawerProps) {
-  const [open, setOpen] = useState(false);
+export function KnowledgeDrawer({ topics, onUploadComplete, open, onOpenChange }: KnowledgeDrawerProps) {
+  const { t } = useLang();
+  const [internalOpen, setInternalOpen] = useState(false);
   const [tab, setTab] = useState<"library" | "history">("library");
   const [manuals, setManuals] = useState<Manual[]>([]);
   const [manualFiles, setManualFiles] = useState<ManualFile[]>([]);
   const drawerRef = useRef<HTMLDivElement>(null);
+  const isOpen = open ?? internalOpen;
+  const setIsOpen = onOpenChange ?? setInternalOpen;
 
   const refreshManuals = useCallback(async () => {
     const [mRes, fRes] = await Promise.all([api.manuals(), api.manualFiles()]);
@@ -39,42 +45,42 @@ export function KnowledgeDrawer({ topics, onUploadComplete }: KnowledgeDrawerPro
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape") setIsOpen(false);
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, []);
+  }, [setIsOpen]);
 
   return (
     <>
       {/* Trigger button */}
       <button
-        onClick={() => setOpen(true)}
+        onClick={() => setIsOpen(true)}
         className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-sm border border-border bg-card hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-        title="Manuals & Internal Knowledge"
+        title={t.factory_library_title}
       >
         <BookOpen className="h-4 w-4" />
-        <span className="text-[11px] font-mono uppercase tracking-wider hidden sm:inline">Library</span>
+        <span className="text-[11px] font-mono uppercase tracking-wider hidden sm:inline">{t.tab_library}</span>
       </button>
 
       {/* Backdrop */}
-      {open && (
+      {isOpen && (
         <div
           className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
-          onClick={() => setOpen(false)}
+          onClick={() => setIsOpen(false)}
         />
       )}
 
       {/* Drawer panel */}
       <div
         ref={drawerRef}
-        className={`fixed top-0 right-0 z-50 h-full w-[340px] max-w-[90vw] bg-background border-l border-border shadow-xl flex flex-col transition-transform duration-200 ease-in-out ${open ? "translate-x-0" : "translate-x-full"}`}
+        className={`fixed top-0 right-0 z-50 h-full w-[340px] max-w-[90vw] bg-background border-l border-border shadow-xl flex flex-col transition-transform duration-200 ease-in-out ${isOpen ? "translate-x-0" : "translate-x-full"}`}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
-          <span className="text-xs font-mono uppercase tracking-widest text-muted-foreground">Library</span>
+          <span className="text-xs font-mono uppercase tracking-widest text-muted-foreground">{t.factory_library_title}</span>
           <button
-            onClick={() => setOpen(false)}
+            onClick={() => setIsOpen(false)}
             className="rounded p-1 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
           >
             <X className="h-4 w-4" />
@@ -104,11 +110,17 @@ export function KnowledgeDrawer({ topics, onUploadComplete }: KnowledgeDrawerPro
             </div>
           ) : (
           <div className="p-4 space-y-6">
+            <section className="rounded-md border border-border bg-card p-3">
+              <h2 className="text-sm font-semibold">{t.factory_library_title}</h2>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                {t.factory_library_desc}
+              </p>
+            </section>
 
             {/* Internal Knowledge */}
             <section>
               <h2 className="text-[10px] font-mono uppercase tracking-[0.15em] text-muted-foreground mb-2">
-                Internal Knowledge
+                {t.topic_buckets}
               </h2>
               <div className="border border-border rounded-sm">
                 <div className="p-2">
@@ -121,7 +133,7 @@ export function KnowledgeDrawer({ topics, onUploadComplete }: KnowledgeDrawerPro
             {manualFiles.length > 0 && (
               <section>
                 <h2 className="text-[10px] font-mono uppercase tracking-[0.15em] text-muted-foreground mb-2">
-                  Manuals Library ({manualFiles.length})
+                  {t.uploaded_files} ({manualFiles.length})
                 </h2>
                 <div className="border border-border rounded-sm divide-y divide-border">
                   {manualFiles.map((f) => {
@@ -149,7 +161,7 @@ export function KnowledgeDrawer({ topics, onUploadComplete }: KnowledgeDrawerPro
                           </a>
                           <p className="text-[10px] text-muted-foreground font-mono">
                             {formatBytes(f.size)}
-                            {ingested && <span className="ml-1.5 text-emerald-600">· indexed</span>}
+                            {ingested && <span className="ml-1.5 text-emerald-600">· {t.indexed}</span>}
                           </p>
                         </div>
                         <a
@@ -170,7 +182,7 @@ export function KnowledgeDrawer({ topics, onUploadComplete }: KnowledgeDrawerPro
             {/* Upload */}
             <section>
               <h2 className="text-[10px] font-mono uppercase tracking-[0.15em] text-muted-foreground mb-2">
-                Add a Manual
+                {t.upload_to_library}
               </h2>
               <UploadForm onComplete={() => { onUploadComplete(); refreshManuals(); }} />
             </section>

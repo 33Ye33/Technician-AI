@@ -41,7 +41,7 @@ export default defineConfig({
         runtimeCaching: [
           {
             // Cache API responses briefly so the app feels snappy on mobile
-            urlPattern: /^\/api\/(knowledge|topics|manuals)$/,
+            urlPattern: /^\/api\/(knowledge|topics|manuals|manuals\/files)$/,
             handler: "NetworkFirst",
             options: {
               cacheName: "api-cache",

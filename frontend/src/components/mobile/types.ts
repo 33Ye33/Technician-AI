@@ -9,3 +9,10 @@ export type DiagMessage =
   | { role: "assistant"; data: DiagnoseResponse };
 
 export type Tab = "ask" | "diagnose";
+
+export interface LibraryStats {
+  indexedManuals: number;
+  uploadedFiles: number;
+  fieldNotes: number;
+  topicBuckets: number;
+}

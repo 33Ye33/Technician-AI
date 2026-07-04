@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { CheckCircle, ShieldAlert, MessageSquare, Stethoscope } from "lucide-react";
 import { useLang } from "@/i18n";
 import { Markdown } from "@/components/shared/markdown";
@@ -7,6 +7,7 @@ import { FeedbackWidget } from "@/components/ask/feedback-widget";
 import { ResolutionCard } from "@/components/ask/resolution-card";
 import { DiagnoseRatingWidget } from "@/components/diagnose-rating-widget";
 import { Spinner } from "@/components/shared/spinner";
+import { ProductActionCards } from "@/components/shared/product-action-cards";
 import type { AskMessage, DiagMessage, Tab } from "./types";
 
 interface ChatThreadProps {
@@ -14,9 +15,20 @@ interface ChatThreadProps {
   askMsgs: AskMessage[];
   diagMsgs: DiagMessage[];
   loading: boolean;
+  onSelectTab: (tab: Tab) => void;
+  onOpenLibrary: () => void;
+  onOpenUpload: () => void;
 }
 
-export function ChatThread({ tab, askMsgs, diagMsgs, loading }: ChatThreadProps) {
+export function ChatThread({
+  tab,
+  askMsgs,
+  diagMsgs,
+  loading,
+  onSelectTab,
+  onOpenLibrary,
+  onOpenUpload,
+}: ChatThreadProps) {
   const { t } = useLang();
   const bottomRef = useRef<HTMLDivElement>(null);
   const count = tab === "ask" ? askMsgs.length : diagMsgs.length;
@@ -29,7 +41,14 @@ export function ChatThread({ tab, askMsgs, diagMsgs, loading }: ChatThreadProps)
 
   return (
     <div className="px-3 py-4 space-y-4">
-      {empty && <EmptyState tab={tab} />}
+      {empty && (
+        <EmptyState
+          tab={tab}
+          onSelectTab={onSelectTab}
+          onOpenLibrary={onOpenLibrary}
+          onOpenUpload={onOpenUpload}
+        />
+      )}
 
       {tab === "ask"
         ? askMsgs.map((m, i) => <AskBubble key={i} msg={m} />)
@@ -59,7 +78,7 @@ function AssistantShell({
   children,
   accent = "primary",
 }: {
-  children: React.ReactNode;
+  children: ReactNode;
   accent?: "primary" | "green" | "destructive";
 }) {
   const border =
@@ -142,18 +161,38 @@ function DiagBubble({ msg }: { msg: DiagMessage }) {
   );
 }
 
-function EmptyState({ tab }: { tab: Tab }) {
+function EmptyState({
+  tab,
+  onSelectTab,
+  onOpenLibrary,
+  onOpenUpload,
+}: {
+  tab: Tab;
+  onSelectTab: (tab: Tab) => void;
+  onOpenLibrary: () => void;
+  onOpenUpload: () => void;
+}) {
   const { t } = useLang();
   const Icon = tab === "ask" ? MessageSquare : Stethoscope;
   const title = tab === "ask" ? t.empty_ask_title : t.empty_diagnose_title;
   const sub = tab === "ask" ? t.empty_ask_desc : t.empty_diagnose_desc;
   return (
-    <div className="flex flex-col items-center justify-center text-center px-6 pt-[18vh]">
-      <div className="rounded-full border border-border bg-card p-3 mb-4">
-        <Icon className="h-6 w-6 text-muted-foreground" />
+    <div className="px-2 pt-5">
+      <div className="flex flex-col items-center justify-center text-center px-4">
+        <div className="rounded-full border border-border bg-card p-3 mb-4">
+          <Icon className="h-6 w-6 text-muted-foreground" />
+        </div>
+        <p className="text-sm font-medium text-foreground mb-1.5">{title}</p>
+        <p className="text-xs text-muted-foreground leading-relaxed max-w-[280px]">{sub}</p>
       </div>
-      <p className="text-sm font-medium text-foreground mb-1.5">{title}</p>
-      <p className="text-xs text-muted-foreground leading-relaxed max-w-[280px]">{sub}</p>
+      <div className="mt-5">
+        <ProductActionCards
+          onAsk={() => onSelectTab("ask")}
+          onDiagnose={() => onSelectTab("diagnose")}
+          onUpload={onOpenUpload}
+          onFieldKnowledge={onOpenLibrary}
+        />
+      </div>
     </div>
   );
 }

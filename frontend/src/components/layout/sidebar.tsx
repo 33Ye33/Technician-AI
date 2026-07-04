@@ -50,9 +50,16 @@ export function Sidebar({ topics, onUploadComplete }: SidebarProps) {
 
   return (
     <aside className="w-full lg:w-[320px] shrink-0 space-y-5">
+      <section className="rounded-md border border-border bg-card p-3">
+        <h2 className="text-sm font-semibold">{t.factory_library_title}</h2>
+        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+          {t.factory_library_desc}
+        </p>
+      </section>
+
       <section>
         <h2 className="text-[10px] font-mono uppercase tracking-[0.15em] text-muted-foreground mb-2">
-          {t.internal_knowledge}
+          {t.topic_buckets}
         </h2>
         <div className="border border-border rounded-sm">
           <ScrollArea className="h-[360px] p-2">
@@ -64,7 +71,7 @@ export function Sidebar({ topics, onUploadComplete }: SidebarProps) {
       {manualFiles.length > 0 && (
         <section>
           <h2 className="text-[10px] font-mono uppercase tracking-[0.15em] text-muted-foreground mb-2">
-            {t.manuals_library} ({manualFiles.length})
+            {t.uploaded_files} ({manualFiles.length})
           </h2>
           <div className="border border-border rounded-sm divide-y divide-border">
             {manualFiles.map((f) => {
@@ -111,7 +118,7 @@ export function Sidebar({ topics, onUploadComplete }: SidebarProps) {
       {manuals.length > 0 && (
         <section>
           <h2 className="text-[10px] font-mono uppercase tracking-[0.15em] text-muted-foreground mb-2">
-            {t.uploaded_manuals}
+            {t.manuals_sops}
           </h2>
           <div className="border border-border rounded-sm divide-y divide-border">
             {manuals.map((m) => (
@@ -137,7 +144,7 @@ export function Sidebar({ topics, onUploadComplete }: SidebarProps) {
 
       <section>
         <h2 className="text-[10px] font-mono uppercase tracking-[0.15em] text-muted-foreground mb-2">
-          {t.add_manual}
+          {t.upload_to_library}
         </h2>
         <UploadForm onComplete={() => { onUploadComplete(); refreshManuals(); }} />
       </section>

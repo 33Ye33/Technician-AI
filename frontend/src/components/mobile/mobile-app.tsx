@@ -3,13 +3,13 @@ import { MessageSquare, Stethoscope } from "lucide-react";
 import { api } from "@/hooks/use-api";
 import { useLang } from "@/i18n";
 import { cn } from "@/lib/utils";
-import type { DiagnoseResponse, Topic } from "@/types/api";
+import type { DiagnoseResponse, KnowledgeEntry, Topic } from "@/types/api";
 import { MobileTopBar } from "./mobile-top-bar";
 import { ChatThread } from "./chat-thread";
 import { ChatComposer } from "./chat-composer";
 import { LibrarySheet } from "./library-sheet";
 import { UploadSheet } from "./upload-sheet";
-import type { AskMessage, DiagMessage, Tab } from "./types";
+import type { AskMessage, DiagMessage, LibraryStats, Tab } from "./types";
 
 interface ManualFile {
   name: string;
@@ -36,17 +36,31 @@ export function MobileApp() {
   const [topics, setTopics] = useState<Topic[]>([]);
   const [manualFiles, setManualFiles] = useState<ManualFile[]>([]);
   const [manuals, setManuals] = useState<Manual[]>([]);
+  const [fieldEntries, setFieldEntries] = useState<KnowledgeEntry[]>([]);
 
   const refresh = useCallback(async () => {
-    const [t, m, f] = await Promise.all([api.topics(), api.manuals(), api.manualFiles()]);
+    const [t, m, f, k] = await Promise.all([
+      api.topics(),
+      api.manuals(),
+      api.manualFiles(),
+      api.knowledge(),
+    ]);
     setTopics(t.topics);
     setManuals(m.manuals);
     setManualFiles(f.files);
+    setFieldEntries(k.entries);
   }, []);
 
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  const libraryStats: LibraryStats = {
+    indexedManuals: manuals.length,
+    uploadedFiles: manualFiles.length,
+    fieldNotes: fieldEntries.length,
+    topicBuckets: topics.length,
+  };
 
   async function handleAsk(text: string) {
     setAskMsgs((m) => [...m, { role: "user", text }]);
@@ -106,6 +120,7 @@ export function MobileApp() {
     <div className="flex flex-col h-[100dvh] overflow-hidden">
       <header className="shrink-0">
         <MobileTopBar
+          stats={libraryStats}
           onOpenLibrary={() => setLibraryOpen(true)}
           onOpenUpload={() => setUploadOpen(true)}
         />
@@ -113,7 +128,15 @@ export function MobileApp() {
       </header>
 
       <main className="flex-1 overflow-y-auto overscroll-contain">
-        <ChatThread tab={tab} askMsgs={askMsgs} diagMsgs={diagMsgs} loading={loading} />
+        <ChatThread
+          tab={tab}
+          askMsgs={askMsgs}
+          diagMsgs={diagMsgs}
+          loading={loading}
+          onSelectTab={setTab}
+          onOpenLibrary={() => setLibraryOpen(true)}
+          onOpenUpload={() => setUploadOpen(true)}
+        />
       </main>
 
       <footer className="shrink-0 border-t border-border bg-background pb-safe">
@@ -130,6 +153,8 @@ export function MobileApp() {
         topics={topics}
         manualFiles={manualFiles}
         manuals={manuals}
+        fieldEntries={fieldEntries}
+        stats={libraryStats}
       />
       <UploadSheet
         open={uploadOpen}
