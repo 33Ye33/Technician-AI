@@ -1,203 +1,156 @@
-<div align="center">
-
 # Technician AI
 
-**The open-source knowledge layer for people who fix, build, and assemble things for a living.**
+**Technician AI is a factory knowledge assistant for technicians.**
 
-Pulls answers from manufacturer manuals — and captures the field-learned tricks that never make it into them.
+It helps teams turn company manuals, SOPs, repair guides, inspection sheets,
+drawings, spreadsheets, and field experience into a searchable knowledge
+library for day-to-day troubleshooting.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-1a1a1a?style=flat-square)](https://opensource.org/licenses/MIT)
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
-[![Status](https://img.shields.io/badge/status-alpha-FF9F1C?style=flat-square)](#roadmap)
-[![LLM](https://img.shields.io/badge/LLM-Gemini%20%7C%20Claude%20%7C%20OpenAI-7C3AED?style=flat-square)](https://ai.google.dev/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
-[![SQLite](https://img.shields.io/badge/SQLite-003B57?style=flat-square&logo=sqlite&logoColor=white)](https://www.sqlite.org/)
 [![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=white)](https://react.dev/)
-[![PWA](https://img.shields.io/badge/PWA-installable-5A0FC8?style=flat-square)](https://web.dev/progressive-web-apps/)
-[![Self-hosted](https://img.shields.io/badge/self--hosted-✓-2D9D78?style=flat-square)](#quickstart)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](#contributing)
-[![GitHub stars](https://img.shields.io/github/stars/AXora009/Technician-AI?style=social)](https://github.com/AXora009/Technician-AI)
+[![SQLite](https://img.shields.io/badge/SQLite-local%20prototype-003B57?style=flat-square&logo=sqlite&logoColor=white)](https://www.sqlite.org/)
+[![PWA](https://img.shields.io/badge/PWA-mobile--ready-5A0FC8?style=flat-square)](https://web.dev/progressive-web-apps/)
 
-[Quickstart](#quickstart) · [Agent Design](#agent-design) · [Key Capabilities](#key-capabilities) · [Roadmap](#roadmap) · [Contributing](#contributing)
+[Quickstart](#quickstart) | [Demo Walkthrough](#demo-walkthrough) | [Architecture](#architecture) | [API Overview](#api-overview)
 
-</div>
+## What It Does
 
----
+Technician AI gives factory technicians a mobile-friendly app for:
 
-## The problem
+- Searching company manuals, SOPs, repair guides, drawings, inspection sheets, and Excel/CSV files.
+- Asking questions with citations from the factory knowledge library.
+- Diagnosing issues with safety-first routing before normal troubleshooting.
+- Attaching photos of machines, alarm screens, damaged parts, work areas, or safety concerns.
+- Receiving structured step-by-step instruction cards when that mode is enabled.
+- Saving verified field experience back into the same knowledge library.
 
-In every factory, repair shop, and assembly line, the most valuable knowledge **isn't in the manual** — it's in the heads of the senior technicians.
+This is an alpha/local prototype, not a production safety system. It is designed
+to help technicians retrieve and structure knowledge, while preserving escalation
+to supervisors, EHS, and qualified maintenance when appropriate.
 
-- The torque trick that prevents a rework.
-- The bolt that strips at 40Nm even though spec says 50.
-- The vendor PDF that's plain wrong about the lubrication schedule.
-- The "if you see this EL pattern, check the welding head before anything else" intuition built over a thousand units.
+## Feature Highlights
 
-That knowledge walks out the door at 5pm, retires every year, and gets re-learned the hard way by every new hire.
+### Factory Knowledge Library
 
-## What Technician AI does
+The app presents the current SQLite database and `manuals/` folder as a default
+Factory Knowledge Library. Each company or factory can upload its own manuals,
+SOPs, repair guides, inspection sheets, drawings, Excel files, and field notes.
 
-Technician AI is an agent workflow for factory and field troubleshooting:
+The library has two knowledge layers in the same local SQLite-backed store:
 
-| | |
-|---|---|
-| **`retrieve`** | Search manuals, SOPs, drawings, inspection sheets, and prior field fixes. |
-| **`diagnose`** | Guide technicians through safe, evidence-controlled troubleshooting. |
-| **`capture`** | Record every question, answer, step tried, outcome, and new field discovery. |
-| **`learn`** | Turn resolved sessions and technician notes into reusable knowledge entries. |
-| **`escalate`** | Detect safety risk, troubleshooting loops, or long unresolved sessions and route to a supervisor or senior support. |
+- **Official documents**: ingested as `manual_chunk` records.
+- **Field knowledge**: saved as searchable `knowledge_entry` records.
 
-The goal is not just to answer from manuals. The goal is to make every troubleshooting session improve the knowledge base.
+These are not separate databases. They are two searchable layers in one local
+knowledge library.
 
----
+### Ask With Citations
 
-## Key Capabilities
+Ask a normal technician question and Technician AI retrieves relevant snippets
+from manuals and field knowledge before answering. Sources are shown below the
+answer and citation markers such as `[#1]` map back to retrieved records.
 
-### Session Memory + Knowledge Capture
-- Records the full troubleshooting trail: user questions, AI suggestions, technician replies, steps attempted, final resolution, and unresolved findings
-- Converts field-discovered issues that are missing from manuals or SOPs into a separate searchable **Internal Knowledge** base
-- Reuses prior resolved cases alongside official documentation on future questions
-- **History tab** in the Library lets any technician replay past sessions, see ratings, and read field comments
+### Safety Gate
 
-### Feedback & Ratings
-- After every Q&A answer or diagnosis resolution: **Worked / Didn't work** outcome buttons + **1–5 star rating** + optional comment — all inline, no popup
-- Comments are automatically structured and saved to the Internal Knowledge base for future retrieval
-- All feedback is stored in the session record and visible in History
+Safety-critical inputs are routed before normal retrieval or LLM troubleshooting.
+The deterministic Safety Gate is used across:
 
-### Two Distinct Knowledge Bases
-- **Manuals** — ingested PDFs, PPTX, DOCX, Excel work instructions (official docs)
-- **Internal Knowledge** — field notes, technician feedback, and session learnings captured on the floor
-- Citations clearly label each source type: `[#N] Manual · page X` vs `[#N] Internal Knowledge · Machine`
+- Normal Ask
+- Diagnosis
+- Photo Ask text input
+- Photo Ask generated image observation
 
-### Safety-First Diagnosis
-Before any troubleshooting begins, the system detects safety-critical incidents:
-- **Broken glass** near moving equipment
-- **Unexpected pneumatic movement** / pinch risk
-- **Electrical hazards** — sparks, live wires, burning smell
-- **Personnel inside the machine**, fire, chemical release
+If a hazard is detected, Technician AI returns the existing Safety Alert flow
+with empty normal sources instead of giving troubleshooting steps.
 
-For each hazard type, a deterministic **Safety Gate** issues source-grounded immediate actions and a prerequisite checklist. Normal diagnosis only begins after all safety confirmations are received.
+Current deterministic coverage includes hazards such as broken glass, exposed
+wires, smoke/fire/sparks, chemical leaks, unexpected machine movement, personnel
+inside a machine, injuries, and unknown emergency-stop situations.
 
-### Evidence-Controlled Diagnosis
-The Diagnose flow uses a finite-state machine with structured evidence quality tracking:
-- Classifies each technician answer as `CONFIRMED`, `APPROXIMATE`, `SUSPECTED`, `HEARSAY`, or `NEGATIVE`
-- Blocks `HIGH` confidence resolution when all evidence is uncertain or hedged
-- Separates *confirmed blocking condition* from *suspected cause* and *alternative possibilities*
-- Enforces minimum evidence requirements before resolution
+### Guided Diagnosis
 
-### Multilingual Interaction
-- Detects the user's input language automatically
-- Answers in the same language during Q&A and troubleshooting
-- Keeps stored knowledge language-aware so multilingual teams can search and reuse the same operational memory
+Diagnosis mode keeps a session history and asks focused follow-up questions.
+It uses the same safety-first routing and can hold the session in a safety state
+until required confirmations are provided.
 
-### Escalation Control
-- Tracks long or repetitive troubleshooting sessions
-- Flags unresolved loops and time thresholds, for example 30 minutes without progress
-- Prompts escalation to a supervisor, EHS, maintenance engineer, or higher-level technical support when the current workflow is no longer productive
+### Photo-Based Ask
 
-### Multi-Format Ingestion
-- **PDF** — text extraction + optional vision AI for image-heavy pages (circuit diagrams, work instructions)
-- **PPTX** — slide-by-slide extraction with speaker notes
-- **DOCX** — section-aware extraction preserving table structure
-- **XLSX / XLS** — each sheet converted to searchable Markdown tables
+Technicians can attach a JPEG, PNG, or WebP image with a question. The app:
 
-### Improved Retrieval
-- Semantic vector search when embeddings are configured (Voyage, Google, OpenAI)
-- Keyword-based fallback when no embedding provider is set — works out of the box
-- Vision ingestion for graphical PDF pages that text extraction misses
+1. Runs the Safety Gate on the text question.
+2. Generates an AI image observation from the uploaded photo.
+3. Runs the Safety Gate on that image observation.
+4. Uses the question plus image observation for normal RAG retrieval.
 
-### Mobile PWA
-Installable on iOS and Android as a Progressive Web App — works like a native app, no app store required.
+Raw uploaded images are not stored permanently.
 
----
+### Step-By-Step Instruction Mode
 
-## Demo
+Ask can optionally request structured instruction cards:
 
-Drop a manual into the system, ask a question, get a cited answer:
+- Safety first
+- Tools needed
+- Numbered steps
+- Expected result
+- When to stop and ask a supervisor
 
-```
-> What is the required air supply pressure for this machine?
+Safety-critical inputs still return a Safety Alert instead of step instructions.
+Step instructions should not replace site procedures, supervisor judgment, or
+lockout/tagout requirements.
 
-The air supply pressure must be maintained at 0.5–0.7 MPa [#3].
+### Structured Field Knowledge Capture
 
-Sources
-  [#3] Manual · Maintenance Manual, p.12
-  [#4] Internal Knowledge · Glass Loading Machine
+After an answer, technicians can save a field finding as structured knowledge:
 
-Did this fix the issue?
-[ Worked ]  [ Didn't work ]
+- Problem / symptom
+- Machine
+- Component
+- What was tried
+- What actually fixed it
+- Confidence
+- Additional technician note
 
-Rate this answer:  ★ ★ ★ ★ ☆
-Add a comment (optional) — what happened on the floor?
-[ Submit Rating ]
-```
-
-For a safety incident:
-
-```
-> A sheet of glass broke inside the machine near the robot arm.
-
-## Safety Alert: Broken Glass
-
-Broken glass inside an operating machine presents a serious laceration hazard.
-Do not reach into the machine or approach moving mechanisms.
-
-### Documented Immediate Actions
-1. Keep machine doors closed and locked until it is confirmed safe to open them.
-   Source: Glass Loading Manual — Hazard section
-2. Wear proper PPE before any cleanup of broken glass.
-   Source: Glass Loading Manual — Hazard section
-3. Press Emergency Stop if there is any immediate risk to personnel, and report
-   to supervisor and EHS immediately.
-   Source: Glass Loading Manual — Hazard section
-
-> For additional steps: Follow your site-approved procedure or contact your
-> supervisor/EHS before proceeding further.
-
-Before I continue: Is everyone clear of the machine, and is anyone injured?
-```
-
----
+The backend stores this as `documents.kind="knowledge_entry"` with structured
+metadata and a readable searchable text body.
 
 ## Quickstart
 
-### 1. Clone and install
+### 1. Clone And Install Backend
 
 ```bash
-git clone https://github.com/AXora009/Technician-AI.git
+git clone https://github.com/33Ye33/Technician-AI.git
 cd Technician-AI
 
-python3 -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 2. Configure
+### 2. Configure Environment
 
 ```bash
 cp .env.example .env
 ```
 
-Open `.env` and set your LLM provider. Three options:
+Open `.env` and set at least one LLM provider/API key.
 
-| Provider | Key to set | Model example |
+Common options:
+
+| Provider | Required key | Example model |
 |---|---|---|
-| **Google Gemini** (free tier available) | `GOOGLE_API_KEY` | `gemini-2.5-flash` |
-| **Anthropic Claude** | `ANTHROPIC_API_KEY` | `claude-sonnet-4-6` |
-| **OpenAI-compatible** | `OPENAI_API_KEY` | `gpt-4o` |
+| Google Gemini | `GOOGLE_API_KEY` | `gemini-2.0-flash` |
+| OpenAI | `OPENAI_API_KEY` | `gpt-4o` |
+| Anthropic Claude | `ANTHROPIC_API_KEY` | `claude-sonnet-4-6` |
 
-Set `LLM_PROVIDER=google` (or `anthropic` / `openai`) to pick explicitly. Otherwise auto-detected from whichever key is present.
+Photo Ask requires a vision-capable provider/model. You can set
+`TECHNICIAN_AI_VISION_MODEL` separately from the normal text model.
 
-For embeddings (optional — improves retrieval quality significantly):
+Embeddings are optional. Without an embedding provider, Technician AI falls back
+to keyword search, which is enough for small demos.
 
-| Provider | Key to set |
-|---|---|
-| **Voyage AI** | `VOYAGE_API_KEY` |
-| **Google** | `GOOGLE_API_KEY` |
-| **OpenAI** | `OPENAI_API_KEY` |
-
-See `.env.example` for all options.
-
-### 3. Build the frontend
+### 3. Build Frontend
 
 ```bash
 cd frontend
@@ -206,322 +159,259 @@ npm run build
 cd ..
 ```
 
-### 4. Ingest a manual
-
-```bash
-python ingest.py path/to/your-manual.pdf
-python ingest.py "path/to/inspection-checklist.xlsx"
-python ingest.py "path/to/work-instruction.docx"
-```
-
-Supported formats: `.pdf`, `.pptx`, `.docx`, `.xlsx`, `.xls`
-
-For PDFs with circuit diagrams or image-heavy pages, enable vision extraction:
-```bash
-# In .env:
-USE_VISION_INGEST=true
-VISION_ALL_PAGES=true
-VISION_PAGE_RANGE=1-30
-```
-
-### 5. Run
+### 4. Run App
 
 ```bash
 python app.py
 ```
 
-Open **http://localhost:8000**. To share with others on the same network, run with `--host 0.0.0.0`.
+Open [http://localhost:8000](http://localhost:8000).
 
----
+`app.py` binds to `0.0.0.0` and prints a LAN URL plus QR code when possible, so
+you can test from a phone on the same WiFi network.
 
-## Agent Design
+## Demo Walkthrough
 
-### 1. Knowledge Base
+Use this sequence to show the current completed features.
 
-Technician AI uses two knowledge layers:
+### 1. Upload Factory Knowledge
 
-| Layer | What it stores | Purpose |
-|---|---|---|
-| **Official docs** | Manuals, SOPs, work instructions, drawings, inspection sheets | Grounded answers with citations |
-| **Field knowledge** | Questions asked, AI answers, troubleshooting steps, outcomes, technician notes, new production findings | Living memory of what actually works on the line |
+Open the app and choose **Upload Knowledge** or **Add to Knowledge Library**.
+Upload one or more files:
 
-Every troubleshooting session becomes a structured record:
+- Manual PDF
+- SOP
+- Repair guide
+- Inspection checklist
+- Drawing
+- Excel or CSV file
 
+The file is stored under `manuals/`, chunked, and indexed in SQLite.
+
+### 2. Ask A Normal Question
+
+Try:
+
+```text
+Machine 3 has a low vacuum alarm. What should I check?
 ```
-problem → context → retrieved evidence → AI suggestions
-→ technician actions → result → resolution status
-→ new field note / validated fix / escalation
+
+Expected demo points:
+
+- Technician AI answers from retrieved library content.
+- Sources appear below the answer.
+- The answer can be rated and marked as worked or not worked.
+
+### 3. Turn On Step-By-Step Mode
+
+Enable **Step-by-step** and ask the same question again.
+
+Expected demo points:
+
+- The response appears as instruction cards.
+- Sources still appear below the procedure.
+- The cards include safety, tools, steps, expected result, and supervisor stop conditions.
+
+### 4. Attach A Photo
+
+Attach a photo of an alarm screen, machine area, or part and ask:
+
+```text
+What should I check from this photo?
 ```
 
-Resolved sessions can be promoted into durable knowledge entries. Unresolved sessions remain searchable so teams can review what was tried before repeating work.
+Expected demo points:
 
-### 2. Agent Processing
+- The backend generates an **Image observation**.
+- The observation is included in the final answer.
+- The answer still uses normal library retrieval and citations when sources are found.
+
+Note: the image observation is AI-generated and is not a confirmed diagnosis.
+
+### 5. Trigger The Safety Gate
+
+Try a safety-critical input:
+
+```text
+Someone is reaching inside the machine and the arm moved suddenly.
+```
+
+Expected demo points:
+
+- Safety Alert appears before normal troubleshooting.
+- No normal manual retrieval sources are cited.
+- Diagnosis mode also enters the safety hold/check behavior for hazards.
+
+### 6. Save Field Knowledge
+
+After a useful answer, click **Save as Field Knowledge** and enter:
+
+- Problem / symptom
+- Machine
+- Component
+- What was tried
+- What actually fixed it
+- Confidence
+- Technician note
+
+Expected demo points:
+
+- The field note is stored as `knowledge_entry`.
+- Structured metadata is kept with the record.
+- A readable text body is generated so future search can find it.
+
+### 7. Retrieve Saved Field Knowledge
+
+Ask a related question using the same machine, component, symptom, or fix
+keywords. The saved field knowledge should be eligible for retrieval alongside
+manual content.
+
+## Configuration Reference
+
+Important environment variables are documented in [.env.example](.env.example).
+
+| Variable | Purpose |
+|---|---|
+| `LLM_PROVIDER` | Optional explicit provider: `google`, `openai`, or `anthropic`. |
+| `TECHNICIAN_AI_MODEL` | Main text model. |
+| `TECHNICIAN_AI_VISION_MODEL` | Vision-capable model for Photo Ask. |
+| `PHOTO_ASK_MAX_BYTES` | Max uploaded photo size in bytes. |
+| `EMBED_PROVIDER` | Optional embedding provider: `voyage`, `google`, or `openai`. |
+| `TECHNICIAN_AI_DB` | SQLite database path. |
+| `USE_VISION_INGEST` | Enables vision extraction during document ingestion. |
+| `USE_LLM_TAGGER` | Enables LLM topic tagging for ingested docs/knowledge. |
+
+## Architecture
 
 ```mermaid
 flowchart TD
-    A[Technician input] --> B[Detect language + intent]
-    B --> C{Safety risk?}
-    C -- yes --> D[Safety gate]
-    D --> E{Safe to continue?}
-    E -- no --> X[Escalate / hold]
-    E -- yes --> F[Retrieve evidence]
-    C -- no --> F
-
-    F --> G[Official docs + field knowledge]
-    G --> H[Reason with citations]
-    H --> I{Mode}
-
-    I -- Q&A --> J[Same-language answer]
-    I -- Diagnose --> K[Next troubleshooting check]
-    K --> L[Record result]
-    L --> M{Resolved?}
-    M -- no --> N{Loop / timeout / low confidence?}
-    N -- no --> K
-    N -- yes --> X
-    M -- yes --> O[Resolution summary]
-
-    J --> P[Session log]
-    L --> P
-    O --> P
-    X --> P
-
-    P --> Q[Extract field learning]
-    Q --> R{Validate}
-    R --> S[Knowledge base]
-    S --> F
+    A["Technician input"] --> B{"Safety-critical text?"}
+    B -- yes --> S["Safety Alert / Safety Hold"]
+    B -- no --> C{"Photo attached?"}
+    C -- yes --> D["Generate image observation"]
+    D --> E{"Safety-critical observation?"}
+    E -- yes --> S
+    E -- no --> R["Retrieve manuals + field knowledge"]
+    C -- no --> R
+    R --> L["LLM answer or structured procedure"]
+    L --> U["Answer UI + sources"]
+    U --> F["Feedback / Save as Field Knowledge"]
+    F --> K["SQLite documents table"]
+    K --> R
 ```
 
-The agent separates what the manual says, what prior technicians learned, and what is only suspected. It should not claim high confidence when the evidence is weak.
+### Data Storage
 
-### 3. Answering Questions
+Technician AI uses local SQLite by default:
 
-For direct questions, the agent returns:
-- The answer in the user's language
-- Source citations from manuals or prior validated field notes
-- Any conflict between official docs and field experience
-- A feedback path: **Worked / Didn't work / I learned something**
+- `documents`: manuals, SOP chunks, field knowledge entries
+- `conversations`: Ask responses, ratings, feedback
+- `diagnose_sessions`: diagnosis history, resolution, feedback
 
-For diagnosis, the agent runs a controlled loop:
-- Confirm safety first
-- Ask for symptoms and observations
-- Recommend one or two concrete checks at a time
-- Track each attempted step and result
-- Stop when resolved, blocked, unsafe, or ready to escalate
+Uploaded source files are stored in `manuals/`. Raw photos submitted to
+`/api/ask/photo` are used for the request and not stored permanently.
 
-### 4. Adding Knowledge Back
+## API Overview
 
-When a technician provides feedback or a session ends, the system structures the new knowledge:
+The React app uses these JSON endpoints:
 
-```
-raw note/session transcript
-   ▼
-LLM extracts: symptom, equipment, suspected cause, confirmed fix,
-evidence quality, source session, language, tags
-   ▼
-human validation / confidence score
-   ▼
-searchable knowledge entry
-```
-
-The next technician asking a related question gets the manual answer plus the validated field fix.
-
-### 5. Escalation Design
-
-The agent should escalate instead of endlessly troubleshooting when:
-- Safety is unresolved or the issue involves EHS risk
-- The same checks are being repeated
-- The session exceeds a configured time threshold, such as 30 minutes
-- The user reports multiple failed attempts with no new evidence
-- The model's confidence remains low after required evidence is collected
-
-Escalation output should include a compact handoff packet:
-- Original problem
-- Timeline of questions and actions
-- Evidence collected
-- Steps already tried
-- Current suspected causes
-- Why escalation was triggered
-
-```
-  .pdf / .pptx / .docx / .xlsx
-          │
-          ▼
-  ┌─────────────────────────────────────┐
-  │  ingest.py                          │
-  │  text extract → vision fallback     │
-  │  chunk → embed (optional) → store   │
-  └──────────────────┬──────────────────┘
-                     ▼
-         ┌───────────────────────┐
-         │  SQLite               │
-         │  manual_chunk +       │
-         │  knowledge_entry      │
-         └──────────┬────────────┘
-                    │
-  "What's the torque spec?"
-           │        ▼
-           ▼   vector search (or keyword fallback)
-      embed query ────────▶ top-K snippets
-                                  │
-                     ┌────────────▼────────────────┐
-                     │  Safety Gate                 │
-                     │  (hazard detected → alert)   │
-                     │                              │
-                     │  Diagnosis FSM               │
-                     │  SAFETY_HOLD → SYMPTOM       │
-                     │  GATHERING → CAUSE NARROWING │
-                     │  → RESOLVED                  │
-                     └────────────┬────────────────┘
-                                  ▼
-                             cited answer
-                                  │
-                                  ▼
-                    [ Worked ] [ Didn't ] [ I learned… ]
-                                  │
-                                  ▼
-                    LLM structures note → embed → insert
-                    → retrievable on next question
-```
-
----
+| Endpoint | Purpose |
+|---|---|
+| `POST /api/ask` | Text Ask. Accepts `question` and optional `step_by_step`. |
+| `POST /api/ask/photo` | Photo Ask. Accepts `question`, `image`, optional `step_by_step`. |
+| `POST /api/diagnose` | Start guided diagnosis. |
+| `POST /api/diagnose/step` | Continue diagnosis session. |
+| `POST /api/ingest` | Upload a manual/SOP/checklist file. |
+| `GET /api/manuals` | List indexed manuals. |
+| `GET /api/manuals/files` | List uploaded files in `manuals/`. |
+| `GET /api/knowledge` | List field knowledge entries. |
+| `GET /api/topics` | List topic buckets. |
+| `POST /api/field-knowledge` | Save structured field knowledge. |
+| `POST /api/feedback/{conversation_id}` | Save worked/did-not-work feedback. |
+| `POST /api/conversations/{conversation_id}/rating` | Save Ask rating/comment. |
+| `POST /api/diagnose/sessions/{session_id}/feedback` | Save diagnosis rating/comment. |
 
 ## Project Layout
 
 ```text
 technician_ai/
   api.py          FastAPI routes and SPA serving
-  ingestion.py    PDF/PPTX/DOCX/Excel ingestion
-  retrieval.py    RAG, diagnosis prompting, feedback capture
-  database.py     SQLite schema and queries
+  retrieval.py    Ask RAG, photo Ask answer flow, step mode, feedback capture
   diagnosis.py    evidence-controlled diagnosis state machine
   safety.py       deterministic safety gate
-  llm.py          LLM provider adapter
-  embeddings.py   embedding provider adapter
+  ingestion.py    PDF/PPTX/DOCX/Excel ingestion
+  database.py     SQLite schema and queries
+  llm.py          LLM and vision provider adapter
+  embeddings.py   optional embedding provider adapter
   tagging.py      topic and entry-type classification
 
-scripts/          maintenance and inspection utilities
 frontend/         React + Vite + Tailwind PWA
+manuals/          uploaded source files
 static/           built frontend served by FastAPI
 templates/        legacy server-rendered fallback UI
-tests/            baseline and evidence checks
+tests/            unit and regression tests
 ```
 
-Root `app.py` and `ingest.py` are intentionally thin wrappers so local commands stay simple:
+## Tests And Build
+
+Run backend tests:
 
 ```bash
-python app.py
-python ingest.py path/to/manual.pdf
+.venv/bin/python -m unittest discover -s tests
 ```
 
----
+Build frontend:
 
-## Stack
+```bash
+cd frontend
+npm run build
+```
 
-| Layer | Choice | Why |
-|---|---|---|
-| **LLM** | Google Gemini / Anthropic Claude / OpenAI-compatible | Pluggable — use whatever provider works for you |
-| **Embeddings** | Voyage AI / Google / OpenAI *(optional)* | Configurable via env vars; keyword fallback when unset |
-| **Vision** | Gemini / Claude / GPT-4o *(optional)* | Extracts text from circuit diagrams and image-heavy PDFs |
-| **Vector store** | SQLite + numpy cosine | Zero infra. Swap for pgvector when you outgrow it |
-| **Backend** | FastAPI + Uvicorn | Async, typed, minimal |
-| **Frontend** | React 19 + Vite + Tailwind CSS + shadcn/ui | Dark/light theming, PWA, installable on mobile |
-| **Ingestion** | pypdf + python-pptx + python-docx + openpyxl + PyMuPDF | PDF, PPTX, DOCX, Excel |
-| **Safety** | `technician_ai/safety.py` + `technician_ai/diagnosis.py` | Deterministic pre-LLM hazard routing + evidence-quality FSM |
+## Limitations
 
----
-
-## Operating modes
-
-| | With embeddings | Without |
-|---|---|---|
-| **Retrieval** | Semantic vector search | Keyword-based fallback |
-| **Scales to** | Thousands of pages | A few short manuals |
-| **Providers** | Voyage, Google, or OpenAI | Any LLM provider |
-
-Start without embeddings to validate the loop. Add Voyage or Google embeddings when you ingest your second manual — retrieval quality improves noticeably on mixed-language or technical documents.
-
----
-
-## Why this matters
-
-Tribal knowledge has been a known problem in industry for decades. Every solution to date has had the same shape:
-- A wiki nobody updates.
-- A SharePoint folder nobody can find.
-- A senior tech who answers the same question 200 times a year.
-- A "lessons learned" doc collected after every incident, then never read again.
-
-The reason these all fail is the same: **contribution friction**. If saving knowledge costs more than re-solving the problem, knowledge doesn't get saved.
-
-Technician AI bets that LLMs finally close that gap. Three taps and one sentence is the contribution. The LLM does the structuring, the embedding, the searching, the retrieval. The technician just answers the question they were going to answer anyway.
-
----
+- Local SQLite prototype; not a production multi-tenant system.
+- Requires a configured LLM provider for generated answers.
+- Photo Ask requires a vision-capable LLM provider/model.
+- Image observation is AI-generated and should not be treated as a confirmed diagnosis.
+- Step-by-step instructions should not replace supervisor judgment, EHS rules, qualified maintenance procedures, or lockout/tagout procedures.
+- Safety Gate is deterministic keyword/pattern routing; it reduces risk but does not replace site safety systems.
+- Uploaded photos are not stored permanently; there is no image database or annotation workflow.
 
 ## Roadmap
 
-**Backbone (✓ shipped)**
-- Polymorphic SQLite store, cosine retrieval, optional embeddings
-- Citation-grounded answers, multi-provider LLM support (Gemini, Claude, OpenAI)
-- PDF + PPTX + DOCX + Excel ingestion
-- Vision extraction for circuit diagrams and image-heavy PDFs
-- **Safety Gate** — deterministic hazard routing before diagnosis
-- **Diagnosis FSM** — evidence-quality controls, SAFETY_HOLD enforcement
-- Progressive Web App — installable on iOS and Android
-- Full session memory: every question, answer, troubleshooting step, outcome, and final resolution stored to SQLite
-- **Library → History tab** — replay any past session, see turn count, rating, and field comments
-- **Inline feedback** — Worked / Didn't work + 1–5 star rating + comment after every response
-- **Two knowledge bases** — Manuals vs. Internal Knowledge, with labeled citations
-- Technician comments auto-promoted to Internal Knowledge for future retrieval
-- Automatic language detection and same-language answers across Q&A and diagnosis
+Shipped:
 
-**Agent Workflow (next)**
-- Escalation triggers for repeated loops, low-confidence diagnosis, safety risk, and long unresolved sessions
-- Supervisor handoff packet with timeline, evidence, attempted fixes, and suspected causes
+- Factory Knowledge Library UI
+- Upload and search manuals, SOPs, repair guides, inspection sheets, drawings, and Excel files
+- Ask with citations
+- Structured Field Knowledge Capture
+- Strengthened Safety Gate for Ask, Diagnosis, and Photo Ask
+- Photo-based Ask / multimodal question flow
+- Step-by-step instruction mode
+- Mobile-friendly PWA shell
 
-**Product UX (next)**
-- Voice input on the answer page (mobile-first capture)
-- Photo attachment on knowledge entries
-- "Conflict surfaced" UI when manual and field note disagree
-- Per-knowledge-entry validation count and decay
-- Retrieval routing by document type (circuit diagram vs. SOP vs. checklist)
-- pgvector backend for >100K chunks
+Possible next steps:
 
-**Beyond**
-- Multi-tenant deployment story
-- Equipment / parts ontology
-- Real-time collaboration on a single fix-in-progress
-
----
+- Photo support inside Diagnosis mode
+- Real multi-company or multi-factory workspaces
+- Deployment guide for a shared team/server environment
+- Direct field knowledge entry form outside feedback
+- Better validation/review workflow for field knowledge
+- Video, AR, annotations, and object detection later
+- pgvector or external vector database for larger deployments
 
 ## Contributing
 
-This is open source because the problem is bigger than any single team. PRs welcome on:
+PRs are welcome. Good areas for contribution:
 
-- New ingestion formats (`.html`, video transcripts, P&ID diagrams)
-- Alternative LLM/embedding providers (drop-in adapters)
-- UI improvements (the v0 is intentionally bare; bring taste)
-- Real-world test corpora and example datasets
-- Documentation and translations
+- Better ingestion for real factory document formats
+- Safety trigger tests and safer response templates
+- UI polish for mobile technicians
+- Deployment documentation
+- Evaluation datasets and regression tests
 
-Open an issue first for anything bigger than a bug fix so we can align on direction.
-
----
-
-## Acknowledgments
-
-Built on the shoulders of giants — Google Gemini, Anthropic Claude, FastAPI, SQLite, React, Tailwind CSS, shadcn/ui, Voyage AI, and the long lineage of people who figured out how to capture institutional knowledge before us.
-
----
+Open an issue first for larger architecture changes.
 
 ## License
 
-MIT — do whatever you want with it. If you ship something using this, drop a link in the issues. We'd love to see it.
-
----
-
-<div align="center">
-
-**If this resonates, star the repo — it's how the project grows.**
-
-[![GitHub stars](https://img.shields.io/github/stars/AXora009/Technician-AI?style=for-the-badge&logo=github)](https://github.com/AXora009/Technician-AI/stargazers)
-
-</div>
+MIT
