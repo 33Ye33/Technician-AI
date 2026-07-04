@@ -577,7 +577,8 @@ def get_diagnose_session(session_id: str) -> dict | None:
         row = conn.execute(
             """
             SELECT session_id, machine, question, history_json, retrieved_doc_ids_json,
-                   is_resolved, final_resolution, confidence, feedback, created_at, updated_at
+                   is_resolved, final_resolution, confidence, rating, feedback_comment,
+                   created_at, updated_at
             FROM diagnose_sessions WHERE session_id = ?
             """,
             (session_id,),
@@ -593,7 +594,8 @@ def get_diagnose_session(session_id: str) -> dict | None:
             "is_resolved": bool(row["is_resolved"]),
             "final_resolution": row["final_resolution"],
             "confidence": row["confidence"],
-            "feedback": row["feedback"],
+            "rating": row["rating"],
+            "feedback_comment": row["feedback_comment"],
             "created_at": row["created_at"],
             "updated_at": row["updated_at"],
         }

@@ -504,6 +504,124 @@ def record_field_note(
     return {"id": doc_id}
 
 
+def _is_missing_llm_config_error(exc: Exception) -> bool:
+    message = str(exc).lower()
+    return any(
+        bit in message
+        for bit in (
+            "llm_provider",
+            "api key",
+            "api_key",
+            "apikey",
+            "authentication",
+        )
+    )
+
+
+def _fallback_structured_field_tags(
+    *,
+    machine: str,
+    component: str,
+    symptom: str,
+    confidence: str,
+    source_conversation_id: int | None,
+) -> dict:
+    path = ["field_knowledge"]
+    if machine:
+        path.append(machine.lower().replace(" ", "_")[:80])
+    elif component:
+        path.append(component.lower().replace(" ", "_")[:80])
+    title_source = component or machine or symptom
+    title = title_source.strip().splitlines()[0][:80] or "field knowledge"
+    if source_conversation_id is not None:
+        title = f"{title} field fix"
+    return {
+        "topic_path": path,
+        "entry_type": "troubleshooting" if confidence == "Confirmed" else "observation",
+        "title": title,
+    }
+
+
+def record_structured_field_knowledge(
+    *,
+    symptom: str,
+    confirmed_fix: str,
+    machine: str | None = None,
+    component: str | None = None,
+    tried: str | None = None,
+    confidence: str | None = None,
+    technician_note: str | None = None,
+    source_conversation_id: int | None = None,
+) -> dict:
+    """Save a structured field-learning entry in the existing documents table."""
+    symptom = (symptom or "").strip()
+    confirmed_fix = (confirmed_fix or "").strip()
+    if not symptom or not confirmed_fix:
+        raise ValueError("symptom and confirmed_fix are required")
+
+    machine = (machine or "").strip()
+    component = (component or "").strip()
+    tried = (tried or "").strip()
+    technician_note = (technician_note or "").strip()
+    confidence = (confidence or "Not sure").strip()
+    if confidence not in {"Confirmed", "Suspected", "Not sure"}:
+        confidence = "Not sure"
+
+    text = "\n".join(
+        [
+            f"Machine: {machine}",
+            f"Component: {component}",
+            f"Symptom: {symptom}",
+            f"Tried: {tried}",
+            f"Confirmed Fix: {confirmed_fix}",
+            f"Confidence: {confidence}",
+            f"Technician Note: {technician_note}",
+        ]
+    )
+    embedding = (
+        embed_texts([text], input_type="document")[0] if EMBEDDINGS_ENABLED else None
+    )
+    try:
+        tags = tagger.tag_content(
+            text,
+            source_label="(structured field knowledge)",
+            existing_topics=db.list_existing_topic_paths(),
+        )
+    except Exception as exc:
+        if not _is_missing_llm_config_error(exc):
+            raise
+        tags = _fallback_structured_field_tags(
+            machine=machine,
+            component=component,
+            symptom=symptom,
+            confidence=confidence,
+            source_conversation_id=source_conversation_id,
+        )
+    metadata = {
+        "origin": "structured_field_knowledge",
+        "symptom": symptom,
+        "machine": machine,
+        "component": component,
+        "tried": tried,
+        "confirmed_fix": confirmed_fix,
+        "confidence": confidence,
+        "technician_note": technician_note,
+        "topic_path": tags["topic_path"],
+        "entry_type": tags["entry_type"],
+        "title": tags["title"],
+    }
+    if source_conversation_id is not None:
+        metadata["source_conversation_id"] = source_conversation_id
+
+    doc_id = db.insert_document(
+        kind="knowledge_entry",
+        text=text,
+        embedding=embedding,
+        metadata=metadata,
+    )
+    return {"id": doc_id, "text": text, "metadata": metadata}
+
+
 def _parse_decision(raw: str) -> dict:
     """Parse the agent's JSON decision, tolerating stray text around the object."""
     try:
