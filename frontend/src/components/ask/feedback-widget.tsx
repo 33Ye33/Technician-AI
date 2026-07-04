@@ -77,8 +77,13 @@ export function FeedbackWidget({ conversationId, hideAddNote = false }: Feedback
 
   if (state === "done") {
     return (
-      <div className="text-xs font-mono text-secondary py-2">
-        {message}
+      <div className="pt-2 space-y-2">
+        <div className="text-xs font-mono text-secondary">
+          {message}
+        </div>
+        <Button variant="outline" size="sm" className="h-9 px-4 text-sm font-medium border-2" onClick={() => setState("fieldKnowledge")}>
+          <PlusCircle className="h-4 w-4 mr-1.5" /> {t.field_knowledge_button}
+        </Button>
       </div>
     );
   }

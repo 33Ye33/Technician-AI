@@ -126,6 +126,36 @@ class FeedbackStatusTests(unittest.TestCase):
         self.assertEqual(results[0]["id"], entry["id"])
         self.assertEqual(results[0]["kind"], "knowledge_entry")
 
+    def test_structured_field_knowledge_saves_without_llm_config(self):
+        def missing_llm_config(*_, **__):
+            raise RuntimeError(
+                "Unknown LLM_PROVIDER=''. Set LLM_PROVIDER to 'anthropic', 'openai', or 'google'."
+            )
+
+        self.retrieval.tagger.tag_content = missing_llm_config
+
+        entry = self.retrieval.record_structured_field_knowledge(
+            symptom="Machine 3 has a low vacuum alarm.",
+            machine="Machine 3",
+            component="Vacuum pump",
+            tried="Reset alarm and checked hoses.",
+            confirmed_fix="Replaced the cracked vacuum hose.",
+            confidence="Confirmed",
+            technician_note="Alarm cleared after hose replacement.",
+            source_conversation_id=7,
+        )
+
+        self.assertGreater(entry["id"], 0)
+        self.assertEqual(entry["metadata"]["origin"], "structured_field_knowledge")
+        self.assertEqual(entry["metadata"]["topic_path"], ["field_knowledge", "machine_3"])
+        self.assertEqual(entry["metadata"]["entry_type"], "troubleshooting")
+        self.assertEqual(entry["metadata"]["source_conversation_id"], 7)
+
+        saved = self.database.list_knowledge_entries()
+        self.assertEqual(saved[0]["id"], entry["id"])
+        self.assertIn("Machine: Machine 3", saved[0]["text"])
+        self.assertIn("Confirmed Fix: Replaced the cracked vacuum hose.", saved[0]["text"])
+
     def test_structured_field_knowledge_rejects_blank_symptom(self):
         with self.assertRaises(ValueError):
             self.retrieval.record_structured_field_knowledge(

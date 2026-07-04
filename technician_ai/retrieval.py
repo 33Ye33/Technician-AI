@@ -504,6 +504,44 @@ def record_field_note(
     return {"id": doc_id}
 
 
+def _is_missing_llm_config_error(exc: Exception) -> bool:
+    message = str(exc).lower()
+    return any(
+        bit in message
+        for bit in (
+            "llm_provider",
+            "api key",
+            "api_key",
+            "apikey",
+            "authentication",
+        )
+    )
+
+
+def _fallback_structured_field_tags(
+    *,
+    machine: str,
+    component: str,
+    symptom: str,
+    confidence: str,
+    source_conversation_id: int | None,
+) -> dict:
+    path = ["field_knowledge"]
+    if machine:
+        path.append(machine.lower().replace(" ", "_")[:80])
+    elif component:
+        path.append(component.lower().replace(" ", "_")[:80])
+    title_source = component or machine or symptom
+    title = title_source.strip().splitlines()[0][:80] or "field knowledge"
+    if source_conversation_id is not None:
+        title = f"{title} field fix"
+    return {
+        "topic_path": path,
+        "entry_type": "troubleshooting" if confidence == "Confirmed" else "observation",
+        "title": title,
+    }
+
+
 def record_structured_field_knowledge(
     *,
     symptom: str,
@@ -543,11 +581,22 @@ def record_structured_field_knowledge(
     embedding = (
         embed_texts([text], input_type="document")[0] if EMBEDDINGS_ENABLED else None
     )
-    tags = tagger.tag_content(
-        text,
-        source_label="(structured field knowledge)",
-        existing_topics=db.list_existing_topic_paths(),
-    )
+    try:
+        tags = tagger.tag_content(
+            text,
+            source_label="(structured field knowledge)",
+            existing_topics=db.list_existing_topic_paths(),
+        )
+    except Exception as exc:
+        if not _is_missing_llm_config_error(exc):
+            raise
+        tags = _fallback_structured_field_tags(
+            machine=machine,
+            component=component,
+            symptom=symptom,
+            confidence=confidence,
+            source_conversation_id=source_conversation_id,
+        )
     metadata = {
         "origin": "structured_field_knowledge",
         "symptom": symptom,
