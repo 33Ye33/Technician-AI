@@ -3,6 +3,8 @@ import { MessageSquare, Stethoscope } from "lucide-react";
 import { api } from "@/hooks/use-api";
 import { useLang } from "@/i18n";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/context/auth-provider";
+import { AIProviderSettings } from "@/components/settings/ai-provider-settings";
 import type { DiagnoseResponse, KnowledgeEntry, Topic } from "@/types/api";
 import { MobileTopBar } from "./mobile-top-bar";
 import { ChatThread } from "./chat-thread";
@@ -23,6 +25,7 @@ interface Manual {
 }
 
 export function MobileApp() {
+  const { user } = useAuth();
   const [tab, setTab] = useState<Tab>("diagnose");
   const [loading, setLoading] = useState(false);
 
@@ -130,6 +133,11 @@ export function MobileApp() {
       </header>
 
       <main className="flex-1 overflow-y-auto overscroll-contain">
+        {user?.role === "org_admin" && (
+          <div className="border-b border-border p-2">
+            <AIProviderSettings />
+          </div>
+        )}
         <ChatThread
           tab={tab}
           askMsgs={askMsgs}

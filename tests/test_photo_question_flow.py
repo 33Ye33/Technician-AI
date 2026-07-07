@@ -2,7 +2,7 @@ import importlib
 import os
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import ANY, patch
 
 from fastapi.testclient import TestClient
 
@@ -164,6 +164,7 @@ class PhotoQuestionFlowTests(unittest.TestCase):
             "What should I check?",
             "Alarm screen shows low vacuum alarm.",
             step_by_step=False,
+            llm_config=ANY,
         )
         body = response.json()
         self.assertIn("Image observation:", body["answer"])

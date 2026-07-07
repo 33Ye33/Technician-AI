@@ -468,7 +468,11 @@ def _render_step_procedure_markdown(procedure: dict) -> str:
     return "\n".join(lines)
 
 
-def _generate_answer_body(user_message: str, step_by_step: bool) -> tuple[str, dict | None]:
+def _generate_answer_body(
+    user_message: str,
+    step_by_step: bool,
+    llm_config: dict | None = None,
+) -> tuple[str, dict | None]:
     if step_by_step:
         try:
             raw = llm_client.chat(
@@ -478,6 +482,7 @@ def _generate_answer_body(user_message: str, step_by_step: bool) -> tuple[str, d
                 max_tokens=2048,
                 json_schema=STEP_PROCEDURE_SCHEMA,
                 cache_system=True,
+                config=llm_config,
             )
             procedure = _normalize_procedure(json.loads(raw))
             return _render_step_procedure_markdown(procedure), procedure
@@ -490,6 +495,7 @@ def _generate_answer_body(user_message: str, step_by_step: bool) -> tuple[str, d
         model=ANSWER_MODEL,
         max_tokens=2048,
         cache_system=True,
+        config=llm_config,
     )
     return answer, None
 
@@ -511,6 +517,7 @@ def answer_question(
     organization_id: str | None = None,
     factory_id: str | None = None,
     user_id: str | None = None,
+    llm_config: dict | None = None,
 ) -> dict:
     hazard_type = safety_gate.classify_safety_critical(question)
     if hazard_type is not None:
@@ -552,7 +559,7 @@ def answer_question(
     sources_block = _format_sources(snippets)
     user_message = f"Sources:\n\n{sources_block}\n\n---\n\nQuestion: {question}"
 
-    answer, procedure = _generate_answer_body(user_message, step_by_step)
+    answer, procedure = _generate_answer_body(user_message, step_by_step, llm_config=llm_config)
     answer = grounding_guard(answer)
     doc_ids = [s["id"] for s in snippets]
     conv_id = db.insert_conversation(
@@ -582,6 +589,7 @@ def answer_photo_question(
     organization_id: str | None = None,
     factory_id: str | None = None,
     user_id: str | None = None,
+    llm_config: dict | None = None,
 ) -> dict:
     """Answer a technician question using a generated image observation plus RAG."""
     image_observation = (image_observation or "").strip()
@@ -644,7 +652,7 @@ def answer_photo_question(
     sources_block = _format_sources(snippets)
     user_message = f"Sources:\n\n{sources_block}\n\n---\n\nQuestion: {combined_question}"
 
-    answer_body, procedure = _generate_answer_body(user_message, step_by_step)
+    answer_body, procedure = _generate_answer_body(user_message, step_by_step, llm_config=llm_config)
     answer = observation_prefix + grounding_guard(answer_body)
     doc_ids = [s["id"] for s in snippets]
     conv_id = db.insert_conversation(
@@ -939,7 +947,10 @@ def diagnose_step(
     machine: str | None = None,
     machine_options: list[str] | None = None,
     escalate: bool = False,
+    organization_id: str | None = None,
     factory_id: str | None = None,
+    user_id: str | None = None,
+    llm_config: dict | None = None,
 ) -> dict:
     """Run one turn of the guided fault-diagnosis agent.
 
@@ -1153,6 +1164,7 @@ def diagnose_step(
         max_tokens=1024,
         json_schema=schema_with_lang,
         cache_system=True,
+        config=llm_config,
     )
 
     # ------------------------------------------------------------------
@@ -1201,7 +1213,12 @@ def diagnose_step(
         resolution = _downgrade_unwarranted_confidence(dict(decision["resolution"]), session)
         doc_ids = [s["id"] for s in snippets]
         conv_id = db.insert_conversation(
-            question, resolution.get("likely_cause", ""), doc_ids
+            question,
+            resolution.get("likely_cause", ""),
+            doc_ids,
+            organization_id=organization_id,
+            factory_id=factory_id,
+            user_id=user_id,
         )
         return {
             "message": (decision.get("message") or "").strip(),

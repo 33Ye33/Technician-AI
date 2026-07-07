@@ -132,6 +132,12 @@ def require_writer(current: CurrentTenant = Depends(get_current_tenant)) -> Curr
     return current
 
 
+def require_org_admin(current: CurrentTenant = Depends(get_current_tenant)) -> CurrentTenant:
+    if current.role != "org_admin":
+        raise HTTPException(status_code=403, detail="org_admin role required")
+    return current
+
+
 def bootstrap_workspace(
     *,
     authorization: Optional[str],

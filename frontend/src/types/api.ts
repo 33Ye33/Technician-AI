@@ -76,6 +76,12 @@ export interface FieldKnowledgeResponse {
   metadata: Record<string, unknown>;
 }
 
+export interface LlmSettings {
+  llm_provider: "deepseek" | "openai" | "google" | "anthropic";
+  llm_model: string;
+  llm_base_url?: string | null;
+}
+
 export interface Resolution {
   likely_cause: string;
   next_steps: string[];
