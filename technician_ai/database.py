@@ -5,6 +5,7 @@ import os
 import re
 import sqlite3
 import struct
+import uuid
 from pathlib import Path
 
 import numpy as np
@@ -35,12 +36,49 @@ def init_db() -> None:
     try:
         conn.executescript(
             """
+            CREATE TABLE IF NOT EXISTS organizations (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS factories (
+                id TEXT PRIMARY KEY,
+                organization_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (organization_id) REFERENCES organizations(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS users (
+                id TEXT PRIMARY KEY,
+                supabase_user_id TEXT UNIQUE NOT NULL,
+                email TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS memberships (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                organization_id TEXT NOT NULL,
+                factory_id TEXT NOT NULL,
+                role TEXT NOT NULL CHECK (role IN ('org_admin', 'supervisor', 'technician', 'viewer')),
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(user_id, factory_id),
+                FOREIGN KEY (user_id) REFERENCES users(id),
+                FOREIGN KEY (organization_id) REFERENCES organizations(id),
+                FOREIGN KEY (factory_id) REFERENCES factories(id)
+            );
+
             CREATE TABLE IF NOT EXISTS documents (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 kind TEXT NOT NULL,
                 text TEXT NOT NULL,
                 metadata_json TEXT NOT NULL DEFAULT '{}',
                 embedding BLOB,
+                organization_id TEXT,
+                factory_id TEXT,
+                uploaded_by_user_id TEXT,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
 
@@ -50,6 +88,9 @@ def init_db() -> None:
                 answer TEXT NOT NULL,
                 retrieved_doc_ids_json TEXT NOT NULL DEFAULT '[]',
                 status TEXT,
+                organization_id TEXT,
+                factory_id TEXT,
+                user_id TEXT,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
 
@@ -65,8 +106,23 @@ def init_db() -> None:
                 rating INTEGER,
                 feedback_comment TEXT,
                 is_resolved INTEGER NOT NULL DEFAULT 0,
+                organization_id TEXT,
+                factory_id TEXT,
+                user_id TEXT,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS uploaded_files (
+                id TEXT PRIMARY KEY,
+                organization_id TEXT NOT NULL,
+                factory_id TEXT NOT NULL,
+                uploaded_by_user_id TEXT,
+                original_filename TEXT NOT NULL,
+                local_path TEXT NOT NULL,
+                content_type TEXT,
+                size_bytes INTEGER,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
             """
         )
@@ -85,15 +141,166 @@ def init_db() -> None:
                 pass
         conn.commit()
 
-        columns = {row[1] for row in conn.execute("PRAGMA table_info(conversations)")}
-        if "status" not in columns:
-            conn.execute("ALTER TABLE conversations ADD COLUMN status TEXT")
-            conn.commit()
-        if "feedback_note" not in columns:
-            conn.execute("ALTER TABLE conversations ADD COLUMN feedback_note TEXT")
-            conn.commit()
+        _ensure_columns(
+            conn,
+            "documents",
+            [
+                ("organization_id", "TEXT"),
+                ("factory_id", "TEXT"),
+                ("uploaded_by_user_id", "TEXT"),
+            ],
+        )
+        _ensure_columns(
+            conn,
+            "conversations",
+            [
+                ("status", "TEXT"),
+                ("feedback_note", "TEXT"),
+                ("rating", "INTEGER"),
+                ("feedback_comment", "TEXT"),
+                ("organization_id", "TEXT"),
+                ("factory_id", "TEXT"),
+                ("user_id", "TEXT"),
+            ],
+        )
+        _ensure_columns(
+            conn,
+            "diagnose_sessions",
+            [
+                ("rating", "INTEGER"),
+                ("feedback_comment", "TEXT"),
+                ("organization_id", "TEXT"),
+                ("factory_id", "TEXT"),
+                ("user_id", "TEXT"),
+            ],
+        )
+        conn.executescript(
+            """
+            CREATE INDEX IF NOT EXISTS idx_documents_factory_kind ON documents(factory_id, kind);
+            CREATE INDEX IF NOT EXISTS idx_conversations_factory_created ON conversations(factory_id, created_at);
+            CREATE INDEX IF NOT EXISTS idx_diagnose_sessions_factory_updated ON diagnose_sessions(factory_id, updated_at);
+            CREATE INDEX IF NOT EXISTS idx_uploaded_files_factory_created ON uploaded_files(factory_id, created_at);
+            CREATE INDEX IF NOT EXISTS idx_memberships_user ON memberships(user_id);
+            CREATE INDEX IF NOT EXISTS idx_users_supabase ON users(supabase_user_id);
+            """
+        )
+        conn.commit()
     finally:
         conn.close()
+
+
+def _ensure_columns(conn: sqlite3.Connection, table: str, columns: list[tuple[str, str]]) -> None:
+    existing = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+    for name, definition in columns:
+        if name not in existing:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {definition}")
+    conn.commit()
+
+
+def create_signup_workspace(
+    *,
+    supabase_user_id: str,
+    email: str,
+    organization_name: str,
+    factory_name: str,
+) -> dict:
+    """Create the first org/factory membership for a Supabase user."""
+    init_db()
+    organization_name = organization_name.strip()
+    factory_name = factory_name.strip()
+    email = email.strip().lower()
+    if not organization_name or not factory_name:
+        raise ValueError("organization and factory names are required")
+
+    conn = connect()
+    try:
+        existing = conn.execute(
+            """
+            SELECT u.id AS user_id, u.email, m.organization_id, m.factory_id, m.role,
+                   o.name AS organization_name, f.name AS factory_name
+            FROM users u
+            JOIN memberships m ON m.user_id = u.id
+            JOIN organizations o ON o.id = m.organization_id
+            JOIN factories f ON f.id = m.factory_id
+            WHERE u.supabase_user_id = ?
+            ORDER BY m.created_at ASC
+            LIMIT 1
+            """,
+            (supabase_user_id,),
+        ).fetchone()
+        if existing:
+            return _context_from_row(existing)
+
+        user_id = str(uuid.uuid4())
+        organization_id = str(uuid.uuid4())
+        factory_id = str(uuid.uuid4())
+        membership_id = str(uuid.uuid4())
+        conn.execute(
+            "INSERT INTO organizations (id, name) VALUES (?, ?)",
+            (organization_id, organization_name),
+        )
+        conn.execute(
+            "INSERT INTO factories (id, organization_id, name) VALUES (?, ?, ?)",
+            (factory_id, organization_id, factory_name),
+        )
+        conn.execute(
+            "INSERT INTO users (id, supabase_user_id, email) VALUES (?, ?, ?)",
+            (user_id, supabase_user_id, email),
+        )
+        conn.execute(
+            """
+            INSERT INTO memberships (id, user_id, organization_id, factory_id, role)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (membership_id, user_id, organization_id, factory_id, "org_admin"),
+        )
+        conn.commit()
+        return {
+            "user_id": user_id,
+            "email": email,
+            "organization_id": organization_id,
+            "organization_name": organization_name,
+            "factory_id": factory_id,
+            "factory_name": factory_name,
+            "role": "org_admin",
+        }
+    finally:
+        conn.close()
+
+
+def get_user_context_by_supabase_id(supabase_user_id: str) -> dict | None:
+    init_db()
+    conn = connect()
+    try:
+        row = conn.execute(
+            """
+            SELECT u.id AS user_id, u.email, m.organization_id, m.factory_id, m.role,
+                   o.name AS organization_name, f.name AS factory_name
+            FROM users u
+            JOIN memberships m ON m.user_id = u.id
+            JOIN organizations o ON o.id = m.organization_id
+            JOIN factories f ON f.id = m.factory_id
+            WHERE u.supabase_user_id = ?
+            ORDER BY m.created_at ASC
+            LIMIT 1
+            """,
+            (supabase_user_id,),
+        ).fetchone()
+        return _context_from_row(row) if row else None
+    finally:
+        conn.close()
+
+
+def _context_from_row(row) -> dict:
+    return {
+        "user_id": row["user_id"],
+        "email": row["email"],
+        "organization_id": row["organization_id"],
+        "organization_name": row["organization_name"],
+        "factory_id": row["factory_id"],
+        "factory_name": row["factory_name"],
+        "role": row["role"],
+    }
 
 
 def insert_document(
@@ -101,12 +308,27 @@ def insert_document(
     text: str,
     embedding: list[float] | None,
     metadata: dict | None = None,
+    organization_id: str | None = None,
+    factory_id: str | None = None,
+    uploaded_by_user_id: str | None = None,
 ) -> int:
     conn = connect()
     try:
         cur = conn.execute(
-            "INSERT INTO documents (kind, text, metadata_json, embedding) VALUES (?, ?, ?, ?)",
-            (kind, text, json.dumps(metadata or {}), _pack(embedding)),
+            """
+            INSERT INTO documents
+                (kind, text, metadata_json, embedding, organization_id, factory_id, uploaded_by_user_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                kind,
+                text,
+                json.dumps(metadata or {}),
+                _pack(embedding),
+                organization_id,
+                factory_id,
+                uploaded_by_user_id,
+            ),
         )
         conn.commit()
         return cur.lastrowid
@@ -116,6 +338,9 @@ def insert_document(
 
 def insert_documents_batch(
     rows: list[tuple[str, str, list[float] | None, dict]],
+    organization_id: str | None = None,
+    factory_id: str | None = None,
+    uploaded_by_user_id: str | None = None,
 ) -> list[int]:
     if not rows:
         return []
@@ -124,8 +349,20 @@ def insert_documents_batch(
         ids: list[int] = []
         for kind, text, embedding, metadata in rows:
             cur = conn.execute(
-                "INSERT INTO documents (kind, text, metadata_json, embedding) VALUES (?, ?, ?, ?)",
-                (kind, text, json.dumps(metadata or {}), _pack(embedding)),
+                """
+                INSERT INTO documents
+                    (kind, text, metadata_json, embedding, organization_id, factory_id, uploaded_by_user_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    kind,
+                    text,
+                    json.dumps(metadata or {}),
+                    _pack(embedding),
+                    organization_id,
+                    factory_id,
+                    uploaded_by_user_id,
+                ),
             )
             ids.append(cur.lastrowid)
         conn.commit()
@@ -134,11 +371,18 @@ def insert_documents_batch(
         conn.close()
 
 
-def search_similar(embedding: list[float], k: int = 6) -> list[dict]:
+def _factory_where(factory_id: str | None) -> tuple[str, tuple]:
+    return (" WHERE factory_id = ?", (factory_id,)) if factory_id else ("", ())
+
+
+def search_similar(embedding: list[float], k: int = 6, factory_id: str | None = None) -> list[dict]:
     conn = connect()
     try:
+        where, params = _factory_where(factory_id)
         rows = conn.execute(
-            "SELECT id, kind, text, metadata_json, embedding FROM documents WHERE embedding IS NOT NULL"
+            f"SELECT id, kind, text, metadata_json, embedding FROM documents{where}"
+            + (" AND embedding IS NOT NULL" if where else " WHERE embedding IS NOT NULL"),
+            params,
         ).fetchall()
     finally:
         conn.close()
@@ -175,13 +419,14 @@ def search_similar(embedding: list[float], k: int = 6) -> list[dict]:
     ]
 
 
-def list_all_documents(limit: int = 20) -> list[dict]:
+def list_all_documents(limit: int = 20, factory_id: str | None = None) -> list[dict]:
     """Used in no-embeddings mode: return the most recent docs as 'all sources'."""
     conn = connect()
     try:
+        where, params = _factory_where(factory_id)
         rows = conn.execute(
-            "SELECT id, kind, text, metadata_json FROM documents ORDER BY id DESC LIMIT ?",
-            (limit,),
+            f"SELECT id, kind, text, metadata_json FROM documents{where} ORDER BY id DESC LIMIT ?",
+            (*params, limit),
         ).fetchall()
         return [
             {
@@ -221,7 +466,7 @@ def _detect_manual_filter(query: str) -> tuple[str, ...] | None:
     return None
 
 
-def search_by_keywords(query: str, k: int = 6) -> list[dict]:
+def search_by_keywords(query: str, k: int = 6, factory_id: str | None = None) -> list[dict]:
     """Keyword-based fallback retrieval when embeddings are disabled.
 
     Scores each document by how many unique query terms appear in its text,
@@ -240,12 +485,14 @@ def search_by_keywords(query: str, k: int = 6) -> list[dict]:
     }
     words = [w.lower() for w in re.split(r"\W+", query) if len(w) > 2 and w.lower() not in _STOPWORDS]
     if not words:
-        return list_all_documents(limit=k)
+        return list_all_documents(limit=k, factory_id=factory_id)
 
     conn = connect()
     try:
+        where, params = _factory_where(factory_id)
         rows = conn.execute(
-            "SELECT id, kind, text, metadata_json FROM documents"
+            f"SELECT id, kind, text, metadata_json FROM documents{where}",
+            params,
         ).fetchall()
     finally:
         conn.close()
@@ -273,7 +520,7 @@ def search_by_keywords(query: str, k: int = 6) -> list[dict]:
     scored.sort(key=lambda x: x[0], reverse=True)
 
     if not scored:
-        return list_all_documents(limit=k)
+        return list_all_documents(limit=k, factory_id=factory_id)
 
     return [
         {
@@ -288,13 +535,22 @@ def search_by_keywords(query: str, k: int = 6) -> list[dict]:
 
 
 def insert_conversation(
-    question: str, answer: str, retrieved_doc_ids: list[int]
+    question: str,
+    answer: str,
+    retrieved_doc_ids: list[int],
+    organization_id: str | None = None,
+    factory_id: str | None = None,
+    user_id: str | None = None,
 ) -> int:
     conn = connect()
     try:
         cur = conn.execute(
-            "INSERT INTO conversations (question, answer, retrieved_doc_ids_json) VALUES (?, ?, ?)",
-            (question, answer, json.dumps(retrieved_doc_ids)),
+            """
+            INSERT INTO conversations
+                (question, answer, retrieved_doc_ids_json, organization_id, factory_id, user_id)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (question, answer, json.dumps(retrieved_doc_ids), organization_id, factory_id, user_id),
         )
         conn.commit()
         return cur.lastrowid
@@ -302,37 +558,52 @@ def insert_conversation(
         conn.close()
 
 
-def update_conversation_status(conversation_id: int, status: str) -> None:
+def update_conversation_status(conversation_id: int, status: str, factory_id: str | None = None) -> None:
     conn = connect()
     try:
-        conn.execute(
-            "UPDATE conversations SET status = ? WHERE id = ?",
-            (status, conversation_id),
-        )
+        if factory_id:
+            conn.execute(
+                "UPDATE conversations SET status = ? WHERE id = ? AND factory_id = ?",
+                (status, conversation_id, factory_id),
+            )
+        else:
+            conn.execute(
+                "UPDATE conversations SET status = ? WHERE id = ?",
+                (status, conversation_id),
+            )
         conn.commit()
     finally:
         conn.close()
 
 
-def update_conversation_feedback_note(conversation_id: int, note: str | None) -> None:
+def update_conversation_feedback_note(
+    conversation_id: int, note: str | None, factory_id: str | None = None
+) -> None:
     conn = connect()
     try:
-        conn.execute(
-            "UPDATE conversations SET feedback_note = ? WHERE id = ?",
-            (note, conversation_id),
-        )
+        if factory_id:
+            conn.execute(
+                "UPDATE conversations SET feedback_note = ? WHERE id = ? AND factory_id = ?",
+                (note, conversation_id, factory_id),
+            )
+        else:
+            conn.execute(
+                "UPDATE conversations SET feedback_note = ? WHERE id = ?",
+                (note, conversation_id),
+            )
         conn.commit()
     finally:
         conn.close()
 
 
-def list_conversations(limit: int = 100) -> list[dict]:
+def list_conversations(limit: int = 100, factory_id: str | None = None) -> list[dict]:
     conn = connect()
     try:
+        where, params = _factory_where(factory_id)
         rows = conn.execute(
-            """SELECT id, question, answer, rating, feedback_comment, created_at
-               FROM conversations ORDER BY created_at DESC LIMIT ?""",
-            (limit,),
+            f"""SELECT id, question, answer, rating, feedback_comment, created_at
+               FROM conversations{where} ORDER BY created_at DESC LIMIT ?""",
+            (*params, limit),
         ).fetchall()
         return [
             {
@@ -349,13 +620,27 @@ def list_conversations(limit: int = 100) -> list[dict]:
         conn.close()
 
 
-def get_conversation(conversation_id: int) -> dict | None:
+def get_conversation(conversation_id: int, factory_id: str | None = None) -> dict | None:
     conn = connect()
     try:
-        row = conn.execute(
-            "SELECT id, question, answer, retrieved_doc_ids_json, status, feedback_note FROM conversations WHERE id = ?",
-            (conversation_id,),
-        ).fetchone()
+        if factory_id:
+            row = conn.execute(
+                """
+                SELECT id, question, answer, retrieved_doc_ids_json, status, feedback_note,
+                       organization_id, factory_id, user_id
+                FROM conversations WHERE id = ? AND factory_id = ?
+                """,
+                (conversation_id, factory_id),
+            ).fetchone()
+        else:
+            row = conn.execute(
+                """
+                SELECT id, question, answer, retrieved_doc_ids_json, status, feedback_note,
+                       organization_id, factory_id, user_id
+                FROM conversations WHERE id = ?
+                """,
+                (conversation_id,),
+            ).fetchone()
         if row is None:
             return None
         return {
@@ -365,25 +650,39 @@ def get_conversation(conversation_id: int) -> dict | None:
             "retrieved_doc_ids": json.loads(row["retrieved_doc_ids_json"]),
             "status": row["status"],
             "feedback_note": row["feedback_note"],
+            "organization_id": row["organization_id"],
+            "factory_id": row["factory_id"],
+            "user_id": row["user_id"],
         }
     finally:
         conn.close()
 
 
-def update_conversation_rating(conversation_id: int, rating: int, comment: str | None = None) -> bool:
+def update_conversation_rating(
+    conversation_id: int,
+    rating: int,
+    comment: str | None = None,
+    factory_id: str | None = None,
+) -> bool:
     conn = connect()
     try:
-        cur = conn.execute(
-            "UPDATE conversations SET rating = ?, feedback_comment = ? WHERE id = ?",
-            (rating, comment, conversation_id),
-        )
+        if factory_id:
+            cur = conn.execute(
+                "UPDATE conversations SET rating = ?, feedback_comment = ? WHERE id = ? AND factory_id = ?",
+                (rating, comment, conversation_id, factory_id),
+            )
+        else:
+            cur = conn.execute(
+                "UPDATE conversations SET rating = ?, feedback_comment = ? WHERE id = ?",
+                (rating, comment, conversation_id),
+            )
         conn.commit()
         return cur.rowcount > 0
     finally:
         conn.close()
 
 
-def list_topics(include_documents: bool = False) -> list[dict]:
+def list_topics(include_documents: bool = False, factory_id: str | None = None) -> list[dict]:
     """Distinct topic paths with per-kind counts. Powers the topic browser.
 
     With include_documents=True, each topic carries its full document list so
@@ -391,8 +690,10 @@ def list_topics(include_documents: bool = False) -> list[dict]:
     """
     conn = connect()
     try:
+        where, params = _factory_where(factory_id)
         rows = conn.execute(
-            "SELECT id, kind, text, metadata_json, created_at FROM documents ORDER BY id"
+            f"SELECT id, kind, text, metadata_json, created_at FROM documents{where} ORDER BY id",
+            params,
         ).fetchall()
     finally:
         conn.close()
@@ -436,12 +737,14 @@ def list_topics(include_documents: bool = False) -> list[dict]:
     return out
 
 
-def list_existing_topic_paths(limit: int = 2000) -> list[list[str]]:
+def list_existing_topic_paths(limit: int = 2000, factory_id: str | None = None) -> list[list[str]]:
     """All distinct topic paths in the DB, for tagger consistency."""
     conn = connect()
     try:
+        where, params = _factory_where(factory_id)
         rows = conn.execute(
-            "SELECT metadata_json FROM documents LIMIT ?", (limit,)
+            f"SELECT metadata_json FROM documents{where} LIMIT ?",
+            (*params, limit),
         ).fetchall()
     finally:
         conn.close()
@@ -459,12 +762,15 @@ def list_existing_topic_paths(limit: int = 2000) -> list[list[str]]:
     return out
 
 
-def list_manuals() -> list[dict]:
+def list_manuals(factory_id: str | None = None) -> list[dict]:
     """Return distinct manuals with chunk count and source path."""
     conn = connect()
     try:
+        where, params = _factory_where(factory_id)
+        clause = f" AND factory_id = ?" if factory_id else ""
         rows = conn.execute(
-            "SELECT metadata_json FROM documents WHERE kind = 'manual_chunk'"
+            f"SELECT metadata_json FROM documents WHERE kind = 'manual_chunk'{clause}",
+            params,
         ).fetchall()
     finally:
         conn.close()
@@ -480,14 +786,20 @@ def list_manuals() -> list[dict]:
     return list(seen.values())
 
 
-def delete_manual(title: str) -> int:
+def delete_manual(title: str, factory_id: str | None = None) -> int:
     """Delete all chunks for a manual. Returns number of rows deleted."""
     conn = connect()
     try:
-        rows = conn.execute(
-            "SELECT id FROM documents WHERE metadata_json LIKE ?",
-            (f'%"manual_title": "{title}"%',)
-        ).fetchall()
+        if factory_id:
+            rows = conn.execute(
+                "SELECT id FROM documents WHERE metadata_json LIKE ? AND factory_id = ?",
+                (f'%"manual_title": "{title}"%', factory_id),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT id FROM documents WHERE metadata_json LIKE ?",
+                (f'%"manual_title": "{title}"%',)
+            ).fetchall()
         ids = [r["id"] for r in rows]
         if ids:
             conn.execute(
@@ -508,6 +820,9 @@ def upsert_diagnose_session(
     is_resolved: bool,
     final_resolution: str | None = None,
     confidence: str | None = None,
+    organization_id: str | None = None,
+    factory_id: str | None = None,
+    user_id: str | None = None,
 ) -> None:
     conn = connect()
     try:
@@ -515,14 +830,17 @@ def upsert_diagnose_session(
             """
             INSERT INTO diagnose_sessions
                 (session_id, machine, question, history_json, retrieved_doc_ids_json,
-                 is_resolved, final_resolution, confidence, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                 is_resolved, final_resolution, confidence, organization_id, factory_id, user_id, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
             ON CONFLICT(session_id) DO UPDATE SET
                 history_json = excluded.history_json,
                 retrieved_doc_ids_json = excluded.retrieved_doc_ids_json,
                 is_resolved = excluded.is_resolved,
                 final_resolution = excluded.final_resolution,
                 confidence = excluded.confidence,
+                organization_id = COALESCE(excluded.organization_id, diagnose_sessions.organization_id),
+                factory_id = COALESCE(excluded.factory_id, diagnose_sessions.factory_id),
+                user_id = COALESCE(excluded.user_id, diagnose_sessions.user_id),
                 updated_at = CURRENT_TIMESTAMP
             """,
             (
@@ -530,6 +848,7 @@ def upsert_diagnose_session(
                 json.dumps(history, ensure_ascii=False),
                 json.dumps(retrieved_doc_ids),
                 int(is_resolved), final_resolution, confidence,
+                organization_id, factory_id, user_id,
             ),
         )
         conn.commit()
@@ -537,19 +856,20 @@ def upsert_diagnose_session(
         conn.close()
 
 
-def list_diagnose_sessions(limit: int = 200) -> list[dict]:
+def list_diagnose_sessions(limit: int = 200, factory_id: str | None = None) -> list[dict]:
     conn = connect()
     try:
+        where, params = _factory_where(factory_id)
         rows = conn.execute(
-            """
+            f"""
             SELECT session_id, machine, question, is_resolved, final_resolution,
                    confidence, rating, feedback_comment, created_at, updated_at,
                    (SELECT COUNT(*) FROM json_each(history_json)) AS turn_count
-            FROM diagnose_sessions
+            FROM diagnose_sessions{where}
             ORDER BY updated_at DESC
             LIMIT ?
             """,
-            (limit,),
+            (*params, limit),
         ).fetchall()
         return [
             {
@@ -571,18 +891,29 @@ def list_diagnose_sessions(limit: int = 200) -> list[dict]:
         conn.close()
 
 
-def get_diagnose_session(session_id: str) -> dict | None:
+def get_diagnose_session(session_id: str, factory_id: str | None = None) -> dict | None:
     conn = connect()
     try:
-        row = conn.execute(
-            """
-            SELECT session_id, machine, question, history_json, retrieved_doc_ids_json,
-                   is_resolved, final_resolution, confidence, rating, feedback_comment,
-                   created_at, updated_at
-            FROM diagnose_sessions WHERE session_id = ?
-            """,
-            (session_id,),
-        ).fetchone()
+        if factory_id:
+            row = conn.execute(
+                """
+                SELECT session_id, machine, question, history_json, retrieved_doc_ids_json,
+                       is_resolved, final_resolution, confidence, rating, feedback_comment,
+                       organization_id, factory_id, user_id, created_at, updated_at
+                FROM diagnose_sessions WHERE session_id = ? AND factory_id = ?
+                """,
+                (session_id, factory_id),
+            ).fetchone()
+        else:
+            row = conn.execute(
+                """
+                SELECT session_id, machine, question, history_json, retrieved_doc_ids_json,
+                       is_resolved, final_resolution, confidence, rating, feedback_comment,
+                       organization_id, factory_id, user_id, created_at, updated_at
+                FROM diagnose_sessions WHERE session_id = ?
+                """,
+                (session_id,),
+            ).fetchone()
         if row is None:
             return None
         return {
@@ -596,6 +927,9 @@ def get_diagnose_session(session_id: str) -> dict | None:
             "confidence": row["confidence"],
             "rating": row["rating"],
             "feedback_comment": row["feedback_comment"],
+            "organization_id": row["organization_id"],
+            "factory_id": row["factory_id"],
+            "user_id": row["user_id"],
             "created_at": row["created_at"],
             "updated_at": row["updated_at"],
         }
@@ -603,31 +937,48 @@ def get_diagnose_session(session_id: str) -> dict | None:
         conn.close()
 
 
-def update_diagnose_feedback(session_id: str, rating: int, comment: str | None = None) -> bool:
+def update_diagnose_feedback(
+    session_id: str,
+    rating: int,
+    comment: str | None = None,
+    factory_id: str | None = None,
+) -> bool:
     conn = connect()
     try:
-        cur = conn.execute(
-            "UPDATE diagnose_sessions SET rating = ?, feedback_comment = ?, updated_at = CURRENT_TIMESTAMP WHERE session_id = ?",
-            (rating, comment, session_id),
-        )
+        if factory_id:
+            cur = conn.execute(
+                """
+                UPDATE diagnose_sessions
+                SET rating = ?, feedback_comment = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE session_id = ? AND factory_id = ?
+                """,
+                (rating, comment, session_id, factory_id),
+            )
+        else:
+            cur = conn.execute(
+                "UPDATE diagnose_sessions SET rating = ?, feedback_comment = ?, updated_at = CURRENT_TIMESTAMP WHERE session_id = ?",
+                (rating, comment, session_id),
+            )
         conn.commit()
         return cur.rowcount > 0
     finally:
         conn.close()
 
 
-def list_knowledge_entries(limit: int = 100) -> list[dict]:
+def list_knowledge_entries(limit: int = 100, factory_id: str | None = None) -> list[dict]:
     conn = connect()
     try:
+        clause = " AND factory_id = ?" if factory_id else ""
+        params = (factory_id, limit) if factory_id else (limit,)
         rows = conn.execute(
-            """
+            f"""
             SELECT id, text, metadata_json, created_at
             FROM documents
-            WHERE kind = 'knowledge_entry'
+            WHERE kind = 'knowledge_entry'{clause}
             ORDER BY id DESC
             LIMIT ?
             """,
-            (limit,),
+            params,
         ).fetchall()
         return [
             {
@@ -638,5 +989,96 @@ def list_knowledge_entries(limit: int = 100) -> list[dict]:
             }
             for r in rows
         ]
+    finally:
+        conn.close()
+
+
+def insert_uploaded_file(
+    *,
+    organization_id: str,
+    factory_id: str,
+    uploaded_by_user_id: str | None,
+    original_filename: str,
+    local_path: str,
+    content_type: str | None,
+    size_bytes: int | None,
+) -> str:
+    conn = connect()
+    try:
+        file_id = str(uuid.uuid4())
+        conn.execute(
+            """
+            INSERT INTO uploaded_files
+                (id, organization_id, factory_id, uploaded_by_user_id,
+                 original_filename, local_path, content_type, size_bytes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                file_id,
+                organization_id,
+                factory_id,
+                uploaded_by_user_id,
+                original_filename,
+                local_path,
+                content_type,
+                size_bytes,
+            ),
+        )
+        conn.commit()
+        return file_id
+    finally:
+        conn.close()
+
+
+def list_uploaded_files(factory_id: str) -> list[dict]:
+    conn = connect()
+    try:
+        rows = conn.execute(
+            """
+            SELECT id, original_filename, local_path, size_bytes, content_type, created_at
+            FROM uploaded_files
+            WHERE factory_id = ?
+            ORDER BY created_at DESC
+            """,
+            (factory_id,),
+        ).fetchall()
+        return [
+            {
+                "id": r["id"],
+                "name": r["original_filename"],
+                "local_path": r["local_path"],
+                "size": r["size_bytes"] or 0,
+                "content_type": r["content_type"],
+                "created_at": r["created_at"],
+            }
+            for r in rows
+        ]
+    finally:
+        conn.close()
+
+
+def get_uploaded_file_by_name(factory_id: str, filename: str) -> dict | None:
+    conn = connect()
+    try:
+        row = conn.execute(
+            """
+            SELECT id, original_filename, local_path, size_bytes, content_type, created_at
+            FROM uploaded_files
+            WHERE factory_id = ? AND original_filename = ?
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            (factory_id, filename),
+        ).fetchone()
+        if not row:
+            return None
+        return {
+            "id": row["id"],
+            "name": row["original_filename"],
+            "local_path": row["local_path"],
+            "size": row["size_bytes"] or 0,
+            "content_type": row["content_type"],
+            "created_at": row["created_at"],
+        }
     finally:
         conn.close()

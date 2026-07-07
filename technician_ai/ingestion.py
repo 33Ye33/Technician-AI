@@ -254,7 +254,12 @@ def _extract_excel_sheets(excel_path: Path) -> list[tuple[int, str]]:
     return sections
 
 
-def ingest_file(path: Path) -> int:
+def ingest_file(
+    path: Path,
+    organization_id: str | None = None,
+    factory_id: str | None = None,
+    uploaded_by_user_id: str | None = None,
+) -> int:
     if not path.exists():
         raise FileNotFoundError(path)
     ext = path.suffix.lower()
@@ -292,7 +297,7 @@ def ingest_file(path: Path) -> int:
     tags_per_chunk: list[dict] = []
     if use_llm_tagger:
         print(f"  tagging {len(page_chunks)} chunks ...")
-        existing_topics = db.list_existing_topic_paths()
+        existing_topics = db.list_existing_topic_paths(factory_id=factory_id)
         for i, (_, chunk) in enumerate(page_chunks):
             tags = tagger.tag_content(chunk, source_label=title, existing_topics=existing_topics)
             tags_per_chunk.append(tags)
@@ -328,7 +333,12 @@ def ingest_file(path: Path) -> int:
         }
         rows.append(("manual_chunk", chunk, embedding, metadata))
 
-    inserted = db.insert_documents_batch(rows)
+    inserted = db.insert_documents_batch(
+        rows,
+        organization_id=organization_id,
+        factory_id=factory_id,
+        uploaded_by_user_id=uploaded_by_user_id,
+    )
     return len(inserted)
 
 

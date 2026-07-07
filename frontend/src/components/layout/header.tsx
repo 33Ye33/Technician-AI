@@ -7,10 +7,22 @@ interface HeaderProps {
   fileCount: number;
   topicCount: number;
   entryCount: number;
+  userEmail?: string;
+  factoryName?: string;
+  onLogout?: () => void;
   actions?: ReactNode;
 }
 
-export function Header({ manualCount, fileCount, topicCount, entryCount, actions }: HeaderProps) {
+export function Header({
+  manualCount,
+  fileCount,
+  topicCount,
+  entryCount,
+  userEmail,
+  factoryName,
+  onLogout,
+  actions,
+}: HeaderProps) {
   const { t } = useLang();
   const stats = [
     { label: t.stat_manuals, value: manualCount },
@@ -49,6 +61,20 @@ export function Header({ manualCount, fileCount, topicCount, entryCount, actions
             </dl>
             {actions}
             <ThemeToggle />
+            {userEmail && (
+              <div className="hidden md:block text-right">
+                <p className="text-[11px] font-mono text-foreground truncate max-w-[220px]">
+                  {factoryName}
+                </p>
+                <button
+                  type="button"
+                  onClick={onLogout}
+                  className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground hover:text-foreground"
+                >
+                  {userEmail} / Log out
+                </button>
+              </div>
+            )}
           </div>
         </div>
 

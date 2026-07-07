@@ -10,26 +10,35 @@ import type {
   KnowledgeEntry,
   Topic,
 } from "@/types/api";
+import { getApiAccessToken } from "@/lib/api-auth";
+
+function authHeaders(extra?: HeadersInit): HeadersInit {
+  const token = getApiAccessToken();
+  return {
+    ...(extra ?? {}),
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
 
 async function post<T>(url: string, body: FormData | Record<string, string>): Promise<T> {
   const isFormData = body instanceof FormData;
   const res = await fetch(url, {
     method: "POST",
     body: isFormData ? body : new URLSearchParams(body),
-    headers: isFormData ? undefined : { "Content-Type": "application/x-www-form-urlencoded" },
+    headers: authHeaders(isFormData ? undefined : { "Content-Type": "application/x-www-form-urlencoded" }),
   });
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
   return res.json();
 }
 
 async function get<T>(url: string): Promise<T> {
-  const res = await fetch(url);
+  const res = await fetch(url, { headers: authHeaders() });
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
   return res.json();
 }
 
 async function httpDelete<T>(url: string): Promise<T> {
-  const res = await fetch(url, { method: "DELETE" });
+  const res = await fetch(url, { method: "DELETE", headers: authHeaders() });
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
   return res.json();
 }
@@ -111,7 +120,33 @@ export const api = {
   conversationRating: (conversationId: number, rating: number, comment?: string) =>
     fetch(`/api/conversations/${conversationId}/rating`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ rating, comment }),
     }).then((r) => r.json() as Promise<{ ok: boolean }>),
+
+  bootstrapWorkspace: (organizationName: string, factoryName: string) =>
+    fetch("/api/auth/bootstrap", {
+      method: "POST",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({
+        organization_name: organizationName,
+        factory_name: factoryName,
+      }),
+    }).then((r) => {
+      if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+      return r.json() as Promise<{ user: AuthUserContext }>;
+    }),
+
+  me: () => get<{ user: AuthUserContext }>("/api/auth/me"),
 };
+
+export interface AuthUserContext {
+  user_id: string;
+  supabase_user_id: string;
+  email: string;
+  organization_id: string;
+  organization_name: string;
+  factory_id: string;
+  factory_name: string;
+  role: "org_admin" | "supervisor" | "technician" | "viewer";
+}
