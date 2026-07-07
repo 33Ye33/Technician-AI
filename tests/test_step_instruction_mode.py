@@ -12,6 +12,7 @@ class StepInstructionModeTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         os.environ["TECHNICIAN_AI_DB"] = os.path.join(self.tmp.name, "tech.db")
+        os.environ["TECHNICIAN_AI_AUTH_DISABLED"] = "true"
 
         import technician_ai.database as database
         import technician_ai.retrieval as retrieval
@@ -25,6 +26,7 @@ class StepInstructionModeTests(unittest.TestCase):
         self.database.init_db()
 
     def tearDown(self):
+        os.environ.pop("TECHNICIAN_AI_AUTH_DISABLED", None)
         self.tmp.cleanup()
 
     def _insert_low_vacuum_doc(self):

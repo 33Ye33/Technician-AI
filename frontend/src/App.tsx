@@ -9,8 +9,10 @@ import { EntryList } from "@/components/knowledge/entry-list";
 import { Spinner } from "@/components/shared/spinner";
 import { LibraryIdentityMark, ProductActionCards } from "@/components/shared/product-action-cards";
 import { MobileApp } from "@/components/mobile/mobile-app";
+import { AuthScreen } from "@/components/auth/auth-screen";
 import { api } from "@/hooks/use-api";
 import { useMediaQuery } from "@/hooks/use-media-query";
+import { useAuth } from "@/context/auth-provider";
 import type { AskResponse, DiagnoseResponse, KnowledgeEntry, Topic } from "@/types/api";
 
 type ResultView =
@@ -31,6 +33,7 @@ interface ManualFile {
 
 export default function App() {
   const { t } = useLang();
+  const { user, loading: authLoading, signOut } = useAuth();
   const [result, setResult] = useState<ResultView | null>(null);
   const [loading, setLoading] = useState(false);
   const [entries, setEntries] = useState<KnowledgeEntry[]>([]);
@@ -42,6 +45,7 @@ export default function App() {
   const portrait = useMediaQuery("(orientation: portrait)");
 
   const refresh = useCallback(async () => {
+    if (!user) return;
     const [k, t, m, f] = await Promise.all([
       api.knowledge(),
       api.topics(),
@@ -52,7 +56,7 @@ export default function App() {
     setTopics(t.topics);
     setManuals(m.manuals);
     setManualFiles(f.files);
-  }, []);
+  }, [user]);
 
   useEffect(() => { refresh(); }, [refresh]);
 
@@ -100,6 +104,11 @@ export default function App() {
     }
   }
 
+  if (authLoading) {
+    return <div className="min-h-screen flex items-center justify-center text-sm text-muted-foreground">Loading...</div>;
+  }
+  if (!user) return <AuthScreen />;
+
   if (portrait) return <MobileApp />;
 
   function scrollToWorkbench() {
@@ -122,6 +131,9 @@ export default function App() {
         fileCount={manualFiles.length}
         topicCount={topics.length}
         entryCount={entries.length}
+        userEmail={user.email}
+        factoryName={user.factory_name}
+        onLogout={signOut}
         actions={drawer}
       />
 

@@ -10,6 +10,7 @@ jinja2>=3.1
 python-multipart>=0.0.12
 python-dotenv>=1.0
 qrcode>=8.0
+PyJWT>=2.8
 
 # LLM providers (install the one you use)
 anthropic>=0.40

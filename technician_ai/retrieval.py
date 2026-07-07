@@ -505,11 +505,24 @@ def _activate_safety_hold(session: dict | None, hazard_type: str) -> None:
     session["safety_confirmed"] = False
 
 
-def answer_question(question: str, step_by_step: bool = False) -> dict:
+def answer_question(
+    question: str,
+    step_by_step: bool = False,
+    organization_id: str | None = None,
+    factory_id: str | None = None,
+    user_id: str | None = None,
+) -> dict:
     hazard_type = safety_gate.classify_safety_critical(question)
     if hazard_type is not None:
         answer = safety_gate.build_safety_response(hazard_type)
-        conv_id = db.insert_conversation(question, answer, [])
+        conv_id = db.insert_conversation(
+            question,
+            answer,
+            [],
+            organization_id=organization_id,
+            factory_id=factory_id,
+            user_id=user_id,
+        )
         return {
             "answer": answer,
             "sources": [],
@@ -520,13 +533,20 @@ def answer_question(question: str, step_by_step: bool = False) -> dict:
 
     if EMBEDDINGS_ENABLED:
         query_vec = embed_query(question)
-        snippets = db.search_similar(query_vec, k=TOP_K)
+        snippets = db.search_similar(query_vec, k=TOP_K, factory_id=factory_id)
     else:
-        snippets = db.search_by_keywords(question, k=TOP_K)
+        snippets = db.search_by_keywords(question, k=TOP_K, factory_id=factory_id)
 
     if not snippets:
         answer = "I don't have any manuals or field notes ingested yet. Run `python ingest.py <pdf>` to load a manual."
-        conv_id = db.insert_conversation(question, answer, [])
+        conv_id = db.insert_conversation(
+            question,
+            answer,
+            [],
+            organization_id=organization_id,
+            factory_id=factory_id,
+            user_id=user_id,
+        )
         return {"answer": answer, "sources": [], "conversation_id": conv_id}
 
     sources_block = _format_sources(snippets)
@@ -535,7 +555,14 @@ def answer_question(question: str, step_by_step: bool = False) -> dict:
     answer, procedure = _generate_answer_body(user_message, step_by_step)
     answer = grounding_guard(answer)
     doc_ids = [s["id"] for s in snippets]
-    conv_id = db.insert_conversation(question, answer, doc_ids)
+    conv_id = db.insert_conversation(
+        question,
+        answer,
+        doc_ids,
+        organization_id=organization_id,
+        factory_id=factory_id,
+        user_id=user_id,
+    )
 
     result = {
         "answer": answer,
@@ -549,7 +576,12 @@ def answer_question(question: str, step_by_step: bool = False) -> dict:
 
 
 def answer_photo_question(
-    question: str, image_observation: str, step_by_step: bool = False
+    question: str,
+    image_observation: str,
+    step_by_step: bool = False,
+    organization_id: str | None = None,
+    factory_id: str | None = None,
+    user_id: str | None = None,
 ) -> dict:
     """Answer a technician question using a generated image observation plus RAG."""
     image_observation = (image_observation or "").strip()
@@ -566,7 +598,14 @@ def answer_photo_question(
     hazard_type = safety_gate.classify_safety_critical(image_observation)
     if hazard_type is not None:
         answer = observation_prefix + safety_gate.build_safety_response(hazard_type)
-        conv_id = db.insert_conversation(combined_question, answer, [])
+        conv_id = db.insert_conversation(
+            combined_question,
+            answer,
+            [],
+            organization_id=organization_id,
+            factory_id=factory_id,
+            user_id=user_id,
+        )
         return {
             "answer": answer,
             "sources": [],
@@ -578,16 +617,23 @@ def answer_photo_question(
 
     if EMBEDDINGS_ENABLED:
         query_vec = embed_query(combined_question)
-        snippets = db.search_similar(query_vec, k=TOP_K)
+        snippets = db.search_similar(query_vec, k=TOP_K, factory_id=factory_id)
     else:
-        snippets = db.search_by_keywords(combined_question, k=TOP_K)
+        snippets = db.search_by_keywords(combined_question, k=TOP_K, factory_id=factory_id)
 
     if not snippets:
         answer = (
             observation_prefix
             + "I don't have any manuals or field notes ingested yet. Run `python ingest.py <pdf>` to load a manual."
         )
-        conv_id = db.insert_conversation(combined_question, answer, [])
+        conv_id = db.insert_conversation(
+            combined_question,
+            answer,
+            [],
+            organization_id=organization_id,
+            factory_id=factory_id,
+            user_id=user_id,
+        )
         return {
             "answer": answer,
             "sources": [],
@@ -601,7 +647,14 @@ def answer_photo_question(
     answer_body, procedure = _generate_answer_body(user_message, step_by_step)
     answer = observation_prefix + grounding_guard(answer_body)
     doc_ids = [s["id"] for s in snippets]
-    conv_id = db.insert_conversation(combined_question, answer, doc_ids)
+    conv_id = db.insert_conversation(
+        combined_question,
+        answer,
+        doc_ids,
+        organization_id=organization_id,
+        factory_id=factory_id,
+        user_id=user_id,
+    )
 
     result = {
         "answer": answer,
@@ -642,9 +695,14 @@ def structure_knowledge_entry(question: str, prior_answer: str, technician_note:
 
 
 def record_knowledge_from_feedback(
-    conversation_id: int, kind: str, note: str | None
+    conversation_id: int,
+    kind: str,
+    note: str | None,
+    organization_id: str | None = None,
+    factory_id: str | None = None,
+    user_id: str | None = None,
 ) -> dict | None:
-    conv = db.get_conversation(conversation_id)
+    conv = db.get_conversation(conversation_id, factory_id=factory_id)
     if conv is None:
         return None
 
@@ -662,7 +720,7 @@ def record_knowledge_from_feedback(
     tags = tagger.tag_content(
         text,
         source_label="(field knowledge)",
-        existing_topics=db.list_existing_topic_paths(),
+        existing_topics=db.list_existing_topic_paths(factory_id=factory_id),
     )
     metadata = {
         "question": structured["question"],
@@ -677,6 +735,9 @@ def record_knowledge_from_feedback(
         text=text,
         embedding=embedding,
         metadata=metadata,
+        organization_id=organization_id,
+        factory_id=factory_id,
+        uploaded_by_user_id=user_id,
     )
     return {"id": doc_id, **structured}
 
@@ -688,6 +749,9 @@ def record_field_note(
     source_id: str | int,
     source_type: str,
     machine: str | None = None,
+    organization_id: str | None = None,
+    factory_id: str | None = None,
+    user_id: str | None = None,
 ) -> dict:
     """Save a technician's field comment as an internal knowledge entry."""
     prefix = f"Machine: {machine}\n" if machine else ""
@@ -698,7 +762,7 @@ def record_field_note(
     tags = tagger.tag_content(
         text,
         source_label="(field feedback)",
-        existing_topics=db.list_existing_topic_paths(),
+        existing_topics=db.list_existing_topic_paths(factory_id=factory_id),
     )
     metadata = {
         "question": question,
@@ -716,6 +780,9 @@ def record_field_note(
         text=text,
         embedding=embedding,
         metadata=metadata,
+        organization_id=organization_id,
+        factory_id=factory_id,
+        uploaded_by_user_id=user_id,
     )
     return {"id": doc_id}
 
@@ -768,6 +835,9 @@ def record_structured_field_knowledge(
     confidence: str | None = None,
     technician_note: str | None = None,
     source_conversation_id: int | None = None,
+    organization_id: str | None = None,
+    factory_id: str | None = None,
+    user_id: str | None = None,
 ) -> dict:
     """Save a structured field-learning entry in the existing documents table."""
     symptom = (symptom or "").strip()
@@ -801,7 +871,7 @@ def record_structured_field_knowledge(
         tags = tagger.tag_content(
             text,
             source_label="(structured field knowledge)",
-            existing_topics=db.list_existing_topic_paths(),
+            existing_topics=db.list_existing_topic_paths(factory_id=factory_id),
         )
     except Exception as exc:
         if not _is_missing_llm_config_error(exc):
@@ -834,6 +904,9 @@ def record_structured_field_knowledge(
         text=text,
         embedding=embedding,
         metadata=metadata,
+        organization_id=organization_id,
+        factory_id=factory_id,
+        uploaded_by_user_id=user_id,
     )
     return {"id": doc_id, "text": text, "metadata": metadata}
 
@@ -866,6 +939,7 @@ def diagnose_step(
     machine: str | None = None,
     machine_options: list[str] | None = None,
     escalate: bool = False,
+    factory_id: str | None = None,
 ) -> dict:
     """Run one turn of the guided fault-diagnosis agent.
 
@@ -1006,9 +1080,9 @@ def diagnose_step(
     # ------------------------------------------------------------------
     retrieval_query = f"{machine} {question}" if machine else question
     if EMBEDDINGS_ENABLED:
-        snippets = db.search_similar(embed_query(retrieval_query), k=TOP_K)
+        snippets = db.search_similar(embed_query(retrieval_query), k=TOP_K, factory_id=factory_id)
     else:
-        snippets = db.search_by_keywords(retrieval_query, k=TOP_K)
+        snippets = db.search_by_keywords(retrieval_query, k=TOP_K, factory_id=factory_id)
 
     if not snippets:
         return {

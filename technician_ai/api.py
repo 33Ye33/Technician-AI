@@ -7,12 +7,13 @@ from pathlib import Path
 from typing import Optional
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
+from . import auth
 from . import database as db
 from . import diagnosis as diagnosis_fsm
 from . import ingestion as ingest
@@ -60,6 +61,16 @@ def _detect_machine(query: str) -> str | None:
 def _valid_machine(name: str | None) -> str | None:
     """Return the name only if it matches a known machine, else None."""
     return name if name in _MACHINE_NAMES else None
+
+
+def _tenant_kwargs(current: auth.CurrentTenant) -> dict:
+    if not current.factory_id:
+        return {}
+    return {
+        "organization_id": current.organization_id,
+        "factory_id": current.factory_id,
+        "user_id": current.user_id,
+    }
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -163,12 +174,43 @@ def topics():
 
 # --- JSON API for React SPA ---
 
+class BootstrapRequest(BaseModel):
+    organization_name: str
+    factory_name: str
+
+
+class ConversationRatingRequest(BaseModel):
+    rating: int
+    comment: Optional[str] = None
+
+
+@app.post("/api/auth/bootstrap")
+def api_auth_bootstrap(
+    body: BootstrapRequest,
+    authorization: Optional[str] = Header(None),
+):
+    current = auth.bootstrap_workspace(
+        authorization=authorization,
+        organization_name=body.organization_name,
+        factory_name=body.factory_name,
+    )
+    return {"user": current.__dict__}
+
+
+@app.get("/api/auth/me")
+def api_auth_me(current: auth.CurrentTenant = Depends(auth.get_current_tenant)):
+    return {"user": current.__dict__}
+
 @app.post("/api/ask")
-def api_ask(question: str = Form(...), step_by_step: bool = Form(False)):
+def api_ask(
+    question: str = Form(...),
+    step_by_step: bool = Form(False),
+    current: auth.CurrentTenant = Depends(auth.get_current_tenant),
+):
     question = question.strip()
     if not question:
         raise HTTPException(status_code=400, detail="empty question")
-    return rag.answer_question(question, step_by_step=step_by_step)
+    return rag.answer_question(question, step_by_step=step_by_step, **_tenant_kwargs(current))
 
 
 @app.post("/api/ask/photo")
@@ -176,6 +218,7 @@ async def api_ask_photo(
     question: str = Form(...),
     image: UploadFile = File(...),
     step_by_step: bool = Form(False),
+    current: auth.CurrentTenant = Depends(auth.get_current_tenant),
 ):
     question = question.strip()
     if not question:
@@ -191,7 +234,14 @@ async def api_ask_photo(
     hazard = safety_gate.classify_safety_critical(question)
     if hazard is not None:
         answer = safety_gate.build_safety_response(hazard)
-        conversation_id = db.insert_conversation(question, answer, [])
+        conversation_id = db.insert_conversation(
+            question,
+            answer,
+            [],
+            organization_id=current.organization_id,
+            factory_id=current.factory_id,
+            user_id=current.user_id,
+        )
         return {
             "answer": answer,
             "sources": [],
@@ -215,7 +265,12 @@ async def api_ask_photo(
             status_code=503,
             detail="Photo questions require a vision-capable LLM provider/model.",
         )
-    return rag.answer_photo_question(question, observation, step_by_step=step_by_step)
+    return rag.answer_photo_question(
+        question,
+        observation,
+        step_by_step=step_by_step,
+        **_tenant_kwargs(current),
+    )
 
 
 @app.post("/api/feedback/{conversation_id}")
@@ -223,24 +278,25 @@ def api_feedback(
     conversation_id: int,
     kind: str = Form(...),
     note: Optional[str] = Form(None),
+    current: auth.CurrentTenant = Depends(auth.require_writer),
 ):
     if kind not in ("worked", "failed", "learned"):
         raise HTTPException(status_code=400, detail="invalid kind")
     if kind == "worked":
-        db.update_conversation_status(conversation_id, "worked")
-        db.update_conversation_feedback_note(conversation_id, None)
+        db.update_conversation_status(conversation_id, "worked", factory_id=current.factory_id)
+        db.update_conversation_feedback_note(conversation_id, None, factory_id=current.factory_id)
         return {"message": "Marked as worked. Thanks!"}
     if kind == "failed":
-        db.update_conversation_status(conversation_id, "failed")
+        db.update_conversation_status(conversation_id, "failed", factory_id=current.factory_id)
     elif kind == "learned":
-        db.update_conversation_status(conversation_id, "learned")
+        db.update_conversation_status(conversation_id, "learned", factory_id=current.factory_id)
 
     note = (note or "").strip()
     if not note:
         raise HTTPException(status_code=400, detail="note required for failed/learned")
 
-    db.update_conversation_feedback_note(conversation_id, note)
-    entry = rag.record_knowledge_from_feedback(conversation_id, kind, note)
+    db.update_conversation_feedback_note(conversation_id, note, factory_id=current.factory_id)
+    entry = rag.record_knowledge_from_feedback(conversation_id, kind, note, **_tenant_kwargs(current))
     if entry is None:
         raise HTTPException(status_code=404, detail="conversation not found")
     return entry
@@ -256,6 +312,7 @@ def api_field_knowledge(
     confidence: Optional[str] = Form("Not sure"),
     technician_note: Optional[str] = Form(None),
     source_conversation_id: Optional[int] = Form(None),
+    current: auth.CurrentTenant = Depends(auth.require_writer),
 ):
     symptom = symptom.strip()
     confirmed_fix = confirmed_fix.strip()
@@ -273,27 +330,32 @@ def api_field_knowledge(
         confidence=confidence,
         technician_note=technician_note,
         source_conversation_id=source_conversation_id,
+        **_tenant_kwargs(current),
     )
 
 
-class ConversationRatingRequest(BaseModel):
-    rating: int
-    comment: Optional[str] = None
-
-
 @app.get("/api/conversations")
-def api_list_conversations():
-    return {"conversations": db.list_conversations()}
+def api_list_conversations(current: auth.CurrentTenant = Depends(auth.get_current_tenant)):
+    return {"conversations": db.list_conversations(factory_id=current.factory_id)}
 
 
 @app.post("/api/conversations/{conversation_id}/rating")
-def api_conversation_rating(conversation_id: int, body: ConversationRatingRequest):
+def api_conversation_rating(
+    conversation_id: int,
+    body: ConversationRatingRequest,
+    current: auth.CurrentTenant = Depends(auth.require_writer),
+):
     if not (1 <= body.rating <= 5):
         raise HTTPException(status_code=400, detail="rating must be 1-5")
-    db.update_conversation_rating(conversation_id, body.rating, body.comment)
+    db.update_conversation_rating(
+        conversation_id,
+        body.rating,
+        body.comment,
+        factory_id=current.factory_id,
+    )
     comment = (body.comment or "").strip()
     if comment:
-        conv = db.get_conversation(conversation_id)
+        conv = db.get_conversation(conversation_id, factory_id=current.factory_id)
         if conv:
             rag.record_field_note(
                 question=conv["question"],
@@ -301,52 +363,72 @@ def api_conversation_rating(conversation_id: int, body: ConversationRatingReques
                 comment=comment,
                 source_id=conversation_id,
                 source_type="ask_conversation",
+                **_tenant_kwargs(current),
             )
     return {"ok": True}
 
 
 @app.post("/api/ingest")
-async def api_ingest(file: UploadFile = File(...)):
+async def api_ingest(
+    file: UploadFile = File(...),
+    current: auth.CurrentTenant = Depends(auth.require_writer),
+):
     ext = Path(file.filename).suffix.lower()
     if ext not in ingest.SUPPORTED_EXTS:
         raise HTTPException(
             status_code=400,
             detail=f"unsupported file type {ext}",
         )
-    dest = Path("manuals") / file.filename
+    dest = Path("manuals") / current.factory_id / file.filename
     dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_bytes(await file.read())
-    chunks = ingest.ingest_file(dest)
+    content = await file.read()
+    dest.write_bytes(content)
+    chunks = ingest.ingest_file(
+        dest,
+        organization_id=current.organization_id,
+        factory_id=current.factory_id,
+        uploaded_by_user_id=current.user_id,
+    )
+    db.insert_uploaded_file(
+        organization_id=current.organization_id,
+        factory_id=current.factory_id,
+        uploaded_by_user_id=current.user_id,
+        original_filename=file.filename,
+        local_path=str(dest),
+        content_type=file.content_type,
+        size_bytes=len(content),
+    )
     return {"filename": file.filename, "chunks": chunks}
 
 
 @app.get("/api/manuals")
-def api_manuals():
-    return {"manuals": db.list_manuals()}
+def api_manuals(current: auth.CurrentTenant = Depends(auth.get_current_tenant)):
+    return {"manuals": db.list_manuals(factory_id=current.factory_id)}
 
 
 @app.get("/api/manuals/files")
-def api_manuals_files():
+def api_manuals_files(current: auth.CurrentTenant = Depends(auth.get_current_tenant)):
     """List all files physically present in the manuals/ directory."""
-    manuals_dir = PROJECT_ROOT / "manuals"
-    if not manuals_dir.exists():
-        return {"files": []}
-    files = []
-    for f in sorted(manuals_dir.iterdir()):
-        if f.is_file() and not f.name.startswith(".") and f.name != ".gitkeep":
-            files.append({
-                "name": f.name,
-                "size": f.stat().st_size,
-                "url": f"/manuals/file/{f.name}",
-            })
-    return {"files": files}
+    files = db.list_uploaded_files(current.factory_id)
+    return {
+        "files": [
+            {"name": f["name"], "size": f["size"], "url": f"/manuals/file/{f['name']}"}
+            for f in files
+        ]
+    }
 
 
 @app.get("/manuals/file/{filename:path}")
-def download_manual_file(filename: str):
+def download_manual_file(
+    filename: str,
+    current: auth.CurrentTenant = Depends(auth.get_current_tenant),
+):
     """Serve a file from the manuals/ directory for download or inline viewing."""
+    record = db.get_uploaded_file_by_name(current.factory_id, filename)
+    if not record:
+        raise HTTPException(status_code=404, detail="file not found")
     manuals_dir = (PROJECT_ROOT / "manuals").resolve()
-    file_path = (manuals_dir / filename).resolve()
+    file_path = Path(record["local_path"]).resolve()
     if not str(file_path).startswith(str(manuals_dir)):
         raise HTTPException(status_code=403, detail="access denied")
     if not file_path.exists() or not file_path.is_file():
@@ -356,8 +438,11 @@ def download_manual_file(filename: str):
 
 
 @app.delete("/api/manuals/{title:path}")
-def api_delete_manual(title: str):
-    deleted = db.delete_manual(title)
+def api_delete_manual(
+    title: str,
+    current: auth.CurrentTenant = Depends(auth.require_writer),
+):
+    deleted = db.delete_manual(title, factory_id=current.factory_id)
     if deleted == 0:
         raise HTTPException(status_code=404, detail="manual not found")
     file_path = Path("manuals") / title
@@ -370,17 +455,20 @@ def api_delete_manual(title: str):
 
 
 @app.get("/api/knowledge")
-def api_knowledge():
-    return {"entries": db.list_knowledge_entries(limit=200)}
+def api_knowledge(current: auth.CurrentTenant = Depends(auth.get_current_tenant)):
+    return {"entries": db.list_knowledge_entries(limit=200, factory_id=current.factory_id)}
 
 
 @app.get("/api/topics")
-def api_topics():
-    return {"topics": db.list_topics()}
+def api_topics(current: auth.CurrentTenant = Depends(auth.get_current_tenant)):
+    return {"topics": db.list_topics(factory_id=current.factory_id)}
 
 
 @app.post("/api/diagnose")
-def api_diagnose_start(question: str = Form(...)):
+def api_diagnose_start(
+    question: str = Form(...),
+    current: auth.CurrentTenant = Depends(auth.get_current_tenant),
+):
     question = question.strip()
     if not question:
         raise HTTPException(status_code=400, detail="empty question")
@@ -398,6 +486,7 @@ def api_diagnose_start(question: str = Form(...)):
     result = rag.diagnose_step(
         question, history=[], session=fsm,
         machine=machine, machine_options=_MACHINE_NAMES,
+        factory_id=current.factory_id,
     )
 
     # The agent may identify the machine from the description on turn 1.
@@ -411,6 +500,7 @@ def api_diagnose_start(question: str = Form(...)):
     _diag_sessions[session_id] = {
         "question": question,
         "machine": machine,
+        "factory_id": current.factory_id,
         "history": [{"role": "assistant", "content": result["message"]}],
         "db_history": db_history,
         "all_doc_ids": list(doc_ids),
@@ -426,6 +516,9 @@ def api_diagnose_start(question: str = Form(...)):
         is_resolved=result["is_resolved"],
         final_resolution=result["resolution"].get("likely_cause") if result.get("resolution") else None,
         confidence=result["resolution"].get("confidence_level") if result.get("resolution") else None,
+        organization_id=current.organization_id,
+        factory_id=current.factory_id,
+        user_id=current.user_id,
     )
 
     return {
@@ -441,6 +534,7 @@ def api_diagnose_start(question: str = Form(...)):
 def api_diagnose_continue(
     session_id: str = Form(...),
     answer: str = Form(...),
+    current: auth.CurrentTenant = Depends(auth.get_current_tenant),
 ):
     answer = answer.strip()
     if not answer:
@@ -448,6 +542,8 @@ def api_diagnose_continue(
     session = _diag_sessions.get(session_id)
     if session is None:
         raise HTTPException(status_code=400, detail="session not found")
+    if session.get("factory_id") != current.factory_id:
+        raise HTTPException(status_code=404, detail="session not found")
 
     question = session["question"]
     history = list(session["history"])
@@ -465,6 +561,7 @@ def api_diagnose_continue(
     result = rag.diagnose_step(
         question, history, session=fsm,
         machine=machine, machine_options=_MACHINE_NAMES, escalate=escalate,
+        factory_id=current.factory_id,
     )
 
     # Capture the machine once the agent (or the reply) makes it clear.
@@ -498,19 +595,25 @@ def api_diagnose_continue(
         is_resolved=result["is_resolved"],
         final_resolution=result["resolution"].get("likely_cause") if result.get("resolution") else None,
         confidence=result["resolution"].get("confidence_level") if result.get("resolution") else None,
+        organization_id=current.organization_id,
+        factory_id=current.factory_id,
+        user_id=current.user_id,
     )
 
     return {**result, "session_id": session_id, "step": step}
 
 
 @app.get("/api/diagnose/sessions")
-def api_diagnose_sessions():
-    return {"sessions": db.list_diagnose_sessions()}
+def api_diagnose_sessions(current: auth.CurrentTenant = Depends(auth.get_current_tenant)):
+    return {"sessions": db.list_diagnose_sessions(factory_id=current.factory_id)}
 
 
 @app.get("/api/diagnose/sessions/{session_id}")
-def api_diagnose_session(session_id: str):
-    s = db.get_diagnose_session(session_id)
+def api_diagnose_session(
+    session_id: str,
+    current: auth.CurrentTenant = Depends(auth.get_current_tenant),
+):
+    s = db.get_diagnose_session(session_id, factory_id=current.factory_id)
     if s is None:
         raise HTTPException(status_code=404, detail="session not found")
     return s
@@ -521,15 +624,21 @@ def api_diagnose_session_feedback(
     session_id: str,
     rating: int = Form(...),
     comment: Optional[str] = Form(None),
+    current: auth.CurrentTenant = Depends(auth.require_writer),
 ):
     if not 1 <= rating <= 5:
         raise HTTPException(status_code=400, detail="rating must be 1-5")
     clean_comment = (comment or "").strip() or None
-    ok = db.update_diagnose_feedback(session_id, rating, clean_comment)
+    ok = db.update_diagnose_feedback(
+        session_id,
+        rating,
+        clean_comment,
+        factory_id=current.factory_id,
+    )
     if not ok:
         raise HTTPException(status_code=404, detail="session not found")
     if clean_comment:
-        s = db.get_diagnose_session(session_id)
+        s = db.get_diagnose_session(session_id, factory_id=current.factory_id)
         if s and s.get("final_resolution"):
             rag.record_field_note(
                 question=s["question"],
@@ -538,6 +647,7 @@ def api_diagnose_session_feedback(
                 source_id=session_id,
                 source_type="diagnose_session",
                 machine=s.get("machine"),
+                **_tenant_kwargs(current),
             )
     return {"ok": True}
 

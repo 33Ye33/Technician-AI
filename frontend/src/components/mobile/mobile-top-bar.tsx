@@ -2,6 +2,7 @@ import { ListTree, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/shared/theme-toggle";
 import { useLang } from "@/i18n";
+import { useAuth } from "@/context/auth-provider";
 import type { LibraryStats } from "./types";
 
 interface MobileTopBarProps {
@@ -12,6 +13,7 @@ interface MobileTopBarProps {
 
 export function MobileTopBar({ stats, onOpenLibrary, onOpenUpload }: MobileTopBarProps) {
   const { t } = useLang();
+  const { user, signOut } = useAuth();
   const statItems = [
     { label: t.stat_manuals, value: stats.indexedManuals },
     { label: t.stat_files, value: stats.uploadedFiles },
@@ -28,7 +30,7 @@ export function MobileTopBar({ stats, onOpenLibrary, onOpenUpload }: MobileTopBa
             <span className="text-green-400 animate-pulse">_</span>
           </h1>
           <p className="mt-1 truncate text-[11px] font-mono uppercase tracking-[0.12em] text-muted-foreground">
-            {t.factory_library_title}
+            {user?.factory_name ?? t.factory_library_title}
           </p>
         </div>
         <div className="flex items-center gap-0.5">
@@ -55,6 +57,14 @@ export function MobileTopBar({ stats, onOpenLibrary, onOpenUpload }: MobileTopBa
           <ThemeToggle />
         </div>
       </div>
+      {user && (
+        <div className="flex items-center justify-between gap-2 px-3 pb-2 text-[10px] font-mono uppercase tracking-wide text-muted-foreground">
+          <span className="truncate">{user.email}</span>
+          <button type="button" onClick={signOut} className="shrink-0 hover:text-foreground">
+            Log out
+          </button>
+        </div>
+      )}
       <div className="grid grid-cols-4 gap-1 px-3 pb-2">
         {statItems.map((item) => (
           <div key={item.label} className="rounded-md border border-border bg-card/70 px-2 py-1">

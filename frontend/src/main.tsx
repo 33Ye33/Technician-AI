@@ -1,6 +1,7 @@
 import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { ThemeProvider } from "@/context/theme-provider";
+import { AuthProvider } from "@/context/auth-provider";
 import { LangProvider } from "@/i18n";
 import { useRegisterSW } from "virtual:pwa-register/react";
 import App from "./App";
@@ -18,7 +19,9 @@ createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <ThemeProvider>
       <LangProvider>
-        <Root />
+        <AuthProvider>
+          <Root />
+        </AuthProvider>
       </LangProvider>
     </ThemeProvider>
   </StrictMode>,
