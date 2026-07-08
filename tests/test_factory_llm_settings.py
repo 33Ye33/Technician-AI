@@ -54,6 +54,29 @@ class FactoryLlmSettingsTests(unittest.TestCase):
         self.assertEqual(settings_b["llm_provider"], "openai")
         self.assertEqual(settings_b["llm_model"], "gpt-4o-mini")
 
+    def test_openai_setting_does_not_inherit_deepseek_base_url(self):
+        factory = self._workspace("openai")
+
+        with patch.dict(
+            os.environ,
+            {
+                "DEEPSEEK_API_KEY": "test-deepseek-key",
+                "DEEPSEEK_BASE_URL": "https://api.deepseek.com",
+                "OPENAI_MODEL": "gpt-4o-mini",
+            },
+        ):
+            self.database.update_factory_llm_settings(
+                factory_id=factory["factory_id"],
+                provider="openai",
+                model="gpt-4o-mini",
+                base_url=None,
+            )
+            settings = self.database.get_factory_llm_settings(factory["factory_id"])
+
+        self.assertEqual(settings["llm_provider"], "openai")
+        self.assertEqual(settings["llm_model"], "gpt-4o-mini")
+        self.assertIsNone(settings["llm_base_url"])
+
     def test_answer_question_uses_current_factory_provider_settings(self):
         factory_a = self._workspace("a")
         factory_b = self._workspace("b")
