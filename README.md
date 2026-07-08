@@ -2,9 +2,15 @@
 
 **Technician AI is a factory knowledge assistant for technicians.**
 
-It helps teams turn company manuals, SOPs, repair guides, inspection sheets,
+It helps factories turn manuals, SOPs, repair guides, inspection sheets,
 drawings, spreadsheets, and field experience into a searchable knowledge
-library for day-to-day troubleshooting.
+library. Technicians can ask questions, get cited answers from their factory's
+own documents, follow safety-first routing, capture verified field knowledge,
+and use multimodal/photo context for troubleshooting.
+
+This repository has been upgraded from a local prototype into a multi-factory
+pilot web app foundation with Supabase login, tenant-scoped retrieval, and
+factory-level AI provider selection.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-1a1a1a?style=flat-square)](https://opensource.org/licenses/MIT)
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
@@ -13,7 +19,7 @@ library for day-to-day troubleshooting.
 [![SQLite](https://img.shields.io/badge/SQLite-local%20prototype-003B57?style=flat-square&logo=sqlite&logoColor=white)](https://www.sqlite.org/)
 [![PWA](https://img.shields.io/badge/PWA-mobile--ready-5A0FC8?style=flat-square)](https://web.dev/progressive-web-apps/)
 
-[Quickstart](#quickstart) | [Demo Walkthrough](#demo-walkthrough) | [Architecture](#architecture) | [API Overview](#api-overview)
+[Quickstart](#quickstart) | [Recent Updates](#recent-major-updates) | [Demo Walkthrough](#demo-walkthrough) | [Architecture](#architecture) | [API Overview](#api-overview)
 
 ## What It Does
 
@@ -29,6 +35,58 @@ Technician AI gives factory technicians a mobile-friendly app for:
 This is an alpha/local prototype, not a production safety system. It is designed
 to help technicians retrieve and structure knowledge, while preserving escalation
 to supervisors, EHS, and qualified maintenance when appropriate.
+
+## Recent Major Updates
+
+- Supabase Auth login, signup, and logout.
+- Multi-factory workspace isolation.
+- Factory-level AI provider settings.
+- DeepSeek support for China-friendly deployments.
+- OpenAI / ChatGPT support for supported global deployments.
+- Google Gemini and Anthropic provider support remain available.
+- Tenant-scoped RAG retrieval, so Ask only searches the current factory's knowledge.
+
+## Multi-Factory Pilot Features
+
+Technician AI now includes the first version of a real multi-factory pilot model:
+
+- Supabase email/password signup and login.
+- Factory workspace creation during signup.
+- Multi-factory tenant isolation.
+- Factory-scoped documents, conversations, field knowledge, feedback, and diagnosis sessions.
+- AI answers only use the current factory's uploaded documents and saved field knowledge.
+- Different factories cannot see or retrieve each other's knowledge.
+
+This keeps the app lightweight for local pilot testing while moving it closer to
+a factory SaaS architecture. SQLite is still used locally for this version; see
+the roadmap for production database and storage work.
+
+## Factory-Level AI Provider Selection
+
+Each factory workspace can choose its own configured AI provider and model:
+
+- **DeepSeek** for China-friendly deployments.
+- **OpenAI / ChatGPT** for supported global deployments.
+- **Google Gemini** and **Anthropic Claude** support remain available.
+
+API keys stay backend-only in `.env`. Factory settings only choose which
+configured provider/model to use; raw provider keys are not stored in the
+frontend or exposed through the settings UI.
+
+Photo Ask requires a vision-capable provider/model. If a factory selects a text
+model that cannot process images, text Ask can still work while Photo Ask should
+be configured with a compatible vision model.
+
+## Pilot Upgrade Contributions
+
+This pilot upgrade extends the original Technician AI prototype with
+authentication, multi-factory isolation, and factory-level LLM provider
+selection, making it closer to a real factory SaaS pilot.
+
+It is still a pilot application. It should not be treated as a finished
+production safety system, and site safety procedures, lockout/tagout rules,
+supervisor judgment, EHS review, and qualified maintenance procedures remain
+authoritative.
 
 ## Feature Highlights
 
@@ -134,14 +192,50 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-Open `.env` and set at least one LLM provider/API key.
+Open `.env` and configure Supabase Auth plus at least one backend LLM provider.
+Do not commit real keys.
 
-Common options:
+Required for the multi-factory login flow:
+
+```bash
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=<your-public-anon-or-publishable-key>
+SUPABASE_JWT_SECRET=<your-real-jwt-secret>
+TECHNICIAN_AI_DB=./data/tech.db
+```
+
+Factory-level provider selection uses backend keys from `.env`. Factories choose
+the configured provider/model; API keys stay server-side.
+
+China-friendly DeepSeek setup:
+
+```bash
+DEEPSEEK_API_KEY=<your-deepseek-api-key>
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+DEEPSEEK_MODEL=deepseek-chat
+```
+
+OpenAI / ChatGPT setup for supported regions:
+
+```bash
+OPENAI_API_KEY=<your-openai-api-key>
+OPENAI_MODEL=gpt-4o-mini
+```
+
+Google Gemini and Anthropic are also supported:
+
+```bash
+GOOGLE_API_KEY=<your-google-api-key>
+ANTHROPIC_API_KEY=<your-anthropic-api-key>
+```
+
+Common provider options:
 
 | Provider | Required key | Example model |
 |---|---|---|
+| DeepSeek | `DEEPSEEK_API_KEY` | `deepseek-chat` |
+| OpenAI / ChatGPT | `OPENAI_API_KEY` | `gpt-4o-mini` |
 | Google Gemini | `GOOGLE_API_KEY` | `gemini-2.0-flash` |
-| OpenAI | `OPENAI_API_KEY` | `gpt-4o` |
 | Anthropic Claude | `ANTHROPIC_API_KEY` | `claude-sonnet-4-6` |
 
 Photo Ask requires a vision-capable provider/model. You can set
@@ -152,8 +246,26 @@ to keyword search, which is enough for small demos.
 
 ### 3. Build Frontend
 
+Create the frontend Supabase config:
+
 ```bash
 cd frontend
+cp .env.example .env.local
+```
+
+Set:
+
+```bash
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=<your-public-anon-or-publishable-key>
+```
+
+Never put `SUPABASE_JWT_SECRET`, DeepSeek keys, OpenAI keys, or other provider
+secrets in `frontend/.env.local`.
+
+Install and build:
+
+```bash
 npm install
 npm run build
 cd ..
@@ -186,7 +298,8 @@ Upload one or more files:
 - Drawing
 - Excel or CSV file
 
-The file is stored under `manuals/`, chunked, and indexed in SQLite.
+The file is stored under `manuals/{factory_id}/`, chunked, and indexed in
+SQLite with the current factory's tenant metadata.
 
 ### 2. Ask A Normal Question
 
@@ -272,7 +385,17 @@ Important environment variables are documented in [.env.example](.env.example).
 
 | Variable | Purpose |
 |---|---|
-| `LLM_PROVIDER` | Optional explicit provider: `google`, `openai`, or `anthropic`. |
+| `SUPABASE_URL` | Supabase project URL for Auth/JWT verification. |
+| `SUPABASE_ANON_KEY` | Public Supabase anon/publishable key used by backend setup helpers. |
+| `SUPABASE_JWT_SECRET` | Backend-only JWT secret for verifying Supabase tokens. Never expose to frontend. |
+| `LLM_PROVIDER` | Optional explicit provider: `deepseek`, `openai`, `google`, or `anthropic`. |
+| `DEEPSEEK_API_KEY` | Backend-only DeepSeek key for China-friendly deployments. |
+| `DEEPSEEK_BASE_URL` | DeepSeek OpenAI-compatible base URL, usually `https://api.deepseek.com`. |
+| `DEEPSEEK_MODEL` | Default DeepSeek chat model, such as `deepseek-chat`. |
+| `OPENAI_API_KEY` | Backend-only OpenAI key for supported global deployments. |
+| `OPENAI_MODEL` | Default OpenAI / ChatGPT model, such as `gpt-4o-mini`. |
+| `GOOGLE_API_KEY` | Backend-only Google Gemini key. |
+| `ANTHROPIC_API_KEY` | Backend-only Anthropic key. |
 | `TECHNICIAN_AI_MODEL` | Main text model. |
 | `TECHNICIAN_AI_VISION_MODEL` | Vision-capable model for Photo Ask. |
 | `PHOTO_ASK_MAX_BYTES` | Max uploaded photo size in bytes. |
@@ -280,6 +403,13 @@ Important environment variables are documented in [.env.example](.env.example).
 | `TECHNICIAN_AI_DB` | SQLite database path. |
 | `USE_VISION_INGEST` | Enables vision extraction during document ingestion. |
 | `USE_LLM_TAGGER` | Enables LLM topic tagging for ingested docs/knowledge. |
+
+Frontend variables in `frontend/.env.local`:
+
+| Variable | Purpose |
+|---|---|
+| `VITE_SUPABASE_URL` | Supabase project URL for browser login/signup. |
+| `VITE_SUPABASE_ANON_KEY` | Public Supabase anon/publishable key for browser Auth. |
 
 ## Architecture
 
@@ -307,8 +437,11 @@ Technician AI uses local SQLite by default:
 - `documents`: manuals, SOP chunks, field knowledge entries
 - `conversations`: Ask responses, ratings, feedback
 - `diagnose_sessions`: diagnosis history, resolution, feedback
+- `organizations`, `factories`, `users`, `memberships`: local pilot tenant model
+- `uploaded_files`: factory-scoped uploaded file metadata
 
-Uploaded source files are stored in `manuals/`. Raw photos submitted to
+Uploaded source files are stored locally under `manuals/{factory_id}/` and are
+scoped by the current authenticated factory. Raw photos submitted to
 `/api/ask/photo` are used for the request and not stored permanently.
 
 ## API Overview
@@ -319,6 +452,10 @@ The React app uses these JSON endpoints:
 |---|---|
 | `POST /api/ask` | Text Ask. Accepts `question` and optional `step_by_step`. |
 | `POST /api/ask/photo` | Photo Ask. Accepts `question`, `image`, optional `step_by_step`. |
+| `POST /api/auth/bootstrap` | Create the first organization/factory workspace for a signed-in user. |
+| `GET /api/me` | Return current user, role, organization, factory, and provider settings. |
+| `GET /api/settings/llm` | Read current factory AI provider settings. |
+| `POST /api/settings/llm` | Update current factory AI provider/model settings. |
 | `POST /api/diagnose` | Start guided diagnosis. |
 | `POST /api/diagnose/step` | Continue diagnosis session. |
 | `POST /api/ingest` | Upload a manual/SOP/checklist file. |
@@ -369,19 +506,29 @@ npm run build
 
 ## Limitations
 
-- Local SQLite prototype; not a production multi-tenant system.
+- Local SQLite pilot; not yet a hardened production multi-tenant database.
 - Requires a configured LLM provider for generated answers.
+- Factory-level provider settings choose among backend-configured providers; API keys are not managed per factory yet.
 - Photo Ask requires a vision-capable LLM provider/model.
 - Image observation is AI-generated and should not be treated as a confirmed diagnosis.
 - Step-by-step instructions should not replace supervisor judgment, EHS rules, qualified maintenance procedures, or lockout/tagout procedures.
 - Safety Gate is deterministic keyword/pattern routing; it reduces risk but does not replace site safety systems.
-- Uploaded photos are not stored permanently; there is no image database or annotation workflow.
+- Uploaded source files are stored locally; production pilots should move to Supabase Storage, S3, or similar.
+- Uploaded photos are not stored permanently; there is no image database, annotation workflow, video, or AR support.
 
 ## Roadmap
 
 Shipped:
 
 - Factory Knowledge Library UI
+- Supabase Auth signup/login/logout
+- Factory workspace creation
+- Multi-factory tenant isolation
+- Factory-scoped documents, conversations, field knowledge, feedback, and diagnosis sessions
+- Factory-level AI provider selection
+- DeepSeek support for China-friendly deployments
+- OpenAI / ChatGPT support for supported global deployments
+- Google Gemini and Anthropic provider support
 - Upload and search manuals, SOPs, repair guides, inspection sheets, drawings, and Excel files
 - Ask with citations
 - Structured Field Knowledge Capture
@@ -392,11 +539,15 @@ Shipped:
 
 Possible next steps:
 
+- Invite codes for workers joining an existing factory
+- Supabase Storage or S3 for uploaded source files
+- Supabase Postgres migration from local SQLite
+- Supervisor review/approval for field knowledge before RAG use
+- Production deployment guide
+- Audit logs and stronger role permissions
+- Production hardening for auth, uploads, CORS, rate limits, and observability
 - Photo support inside Diagnosis mode
-- Real multi-company or multi-factory workspaces
-- Deployment guide for a shared team/server environment
 - Direct field knowledge entry form outside feedback
-- Better validation/review workflow for field knowledge
 - Video, AR, annotations, and object detection later
 - pgvector or external vector database for larger deployments
 
