@@ -11,6 +11,7 @@ manuals/*.xls
 manuals/*.XLS
 manuals/*.docx
 manuals/*.DOCX
+manuals/
 .claude/
 __pycache__/
 *.pyc
