@@ -225,6 +225,16 @@ def default_llm_settings() -> dict:
     if provider not in VALID_LLM_PROVIDERS:
         provider = "openai"
 
+    provider_defaults = _llm_defaults_for_provider(provider)
+    return {
+        "llm_provider": provider or None,
+        "llm_model": provider_defaults["llm_model"],
+        "llm_base_url": provider_defaults["llm_base_url"],
+    }
+
+
+def _llm_defaults_for_provider(provider: str | None) -> dict:
+    provider = (provider or "").strip().lower()
     model_by_provider = {
         "deepseek": os.environ.get("DEEPSEEK_MODEL", "deepseek-chat"),
         "openai": os.environ.get("OPENAI_MODEL") or os.environ.get("TECHNICIAN_AI_MODEL", "gpt-4o-mini"),
@@ -238,7 +248,6 @@ def default_llm_settings() -> dict:
         "anthropic": None,
     }
     return {
-        "llm_provider": provider or None,
         "llm_model": model_by_provider.get(provider),
         "llm_base_url": base_url_by_provider.get(provider),
     }
@@ -384,10 +393,11 @@ def get_factory_llm_settings(factory_id: str | None) -> dict:
     provider = (row["llm_provider"] or defaults["llm_provider"] or "").strip().lower()
     if provider not in VALID_LLM_PROVIDERS:
         provider = defaults["llm_provider"]
+    provider_defaults = _llm_defaults_for_provider(provider)
     return {
         "llm_provider": provider,
-        "llm_model": (row["llm_model"] or defaults["llm_model"] or "").strip() or None,
-        "llm_base_url": (row["llm_base_url"] or defaults["llm_base_url"] or "").strip() or None,
+        "llm_model": (row["llm_model"] or provider_defaults["llm_model"] or "").strip() or None,
+        "llm_base_url": (row["llm_base_url"] or provider_defaults["llm_base_url"] or "").strip() or None,
     }
 
 
