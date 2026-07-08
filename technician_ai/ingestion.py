@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import logging
 import os
 import sys
 from pathlib import Path
@@ -17,6 +18,7 @@ from . import retrieval as rag
 from . import tagging as tagger
 
 SUPPORTED_EXTS = {".pdf", ".pptx", ".docx", ".xlsx", ".xls"}
+log = logging.getLogger(__name__)
 
 USE_VISION_INGEST = os.environ.get("USE_VISION_INGEST", "false").lower() not in ("false", "0", "no")
 # Force vision on every page regardless of text quality (for circuit diagrams).
@@ -40,6 +42,14 @@ VISION_PROMPT = (
     "If this is a circuit/electrical diagram, pay special attention to power supply voltages, "
     "component labels, and any overview or summary tables."
 )
+
+
+def _fallback_tags(source_label: str) -> dict:
+    return {
+        "topic_path": [source_label],
+        "entry_type": "reference",
+        "title": source_label[:120] or "untitled",
+    }
 
 
 def _render_page_as_png(pdf_path: Path, page_num: int) -> bytes:
@@ -299,7 +309,11 @@ def ingest_file(
         print(f"  tagging {len(page_chunks)} chunks ...")
         existing_topics = db.list_existing_topic_paths(factory_id=factory_id)
         for i, (_, chunk) in enumerate(page_chunks):
-            tags = tagger.tag_content(chunk, source_label=title, existing_topics=existing_topics)
+            try:
+                tags = tagger.tag_content(chunk, source_label=title, existing_topics=existing_topics)
+            except Exception as exc:
+                log.warning("LLM tagger failed for %s; using fallback tags: %s", title, exc)
+                tags = _fallback_tags(title)
             tags_per_chunk.append(tags)
             existing_topics.append(tags["topic_path"])
             if (i + 1) % 5 == 0 or i + 1 == len(page_chunks):
