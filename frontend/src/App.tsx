@@ -10,6 +10,7 @@ import { Spinner } from "@/components/shared/spinner";
 import { LibraryIdentityMark, ProductActionCards } from "@/components/shared/product-action-cards";
 import { MobileApp } from "@/components/mobile/mobile-app";
 import { AuthScreen } from "@/components/auth/auth-screen";
+import { AIProviderSettings } from "@/components/settings/ai-provider-settings";
 import { api } from "@/hooks/use-api";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { useAuth } from "@/context/auth-provider";
@@ -153,6 +154,7 @@ export default function App() {
               onUpload={() => setLibraryOpen(true)}
               onFieldKnowledge={() => setLibraryOpen(true)}
             />
+            {user.role === "org_admin" && <AIProviderSettings />}
           </section>
 
           <section ref={workbenchRef}>

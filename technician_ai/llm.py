@@ -7,6 +7,7 @@ import logging
 import os
 import re
 import base64
+from dataclasses import dataclass
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -19,7 +20,9 @@ LLM_BASE_URL = os.environ.get("LLM_BASE_URL")
 LLM_API_KEY = os.environ.get("LLM_API_KEY")
 
 if not LLM_PROVIDER:
-    if os.environ.get("ANTHROPIC_API_KEY"):
+    if os.environ.get("DEEPSEEK_API_KEY"):
+        LLM_PROVIDER = "deepseek"
+    elif os.environ.get("ANTHROPIC_API_KEY"):
         LLM_PROVIDER = "anthropic"
     elif os.environ.get("OPENAI_API_KEY"):
         LLM_PROVIDER = "openai"
@@ -27,45 +30,99 @@ if not LLM_PROVIDER:
         LLM_PROVIDER = "google"
 
 _client = None
+_client_cache: dict[tuple[str, str | None, str | None], object] = {}
 
 
-def _get_client():
+@dataclass(frozen=True)
+class LLMConfig:
+    provider: str | None = None
+    model: str | None = None
+    base_url: str | None = None
+
+
+def _normalize_config(config: LLMConfig | dict | None) -> LLMConfig:
+    if config is None:
+        return LLMConfig(provider=LLM_PROVIDER, base_url=LLM_BASE_URL)
+    if isinstance(config, LLMConfig):
+        return config
+    return LLMConfig(
+        provider=(config.get("provider") or config.get("llm_provider") or "").lower(),
+        model=config.get("model") or config.get("llm_model"),
+        base_url=config.get("base_url") or config.get("llm_base_url"),
+    )
+
+
+def _api_key_for_provider(provider: str) -> str | None:
+    if provider == "deepseek":
+        return LLM_API_KEY or os.environ.get("DEEPSEEK_API_KEY")
+    if provider == "openai":
+        return LLM_API_KEY or os.environ.get("OPENAI_API_KEY")
+    if provider == "anthropic":
+        return LLM_API_KEY or os.environ.get("ANTHROPIC_API_KEY")
+    if provider == "google":
+        return LLM_API_KEY or os.environ.get("GOOGLE_API_KEY")
+    return LLM_API_KEY
+
+
+def _base_url_for_provider(provider: str, configured: str | None) -> str | None:
+    if configured:
+        return configured
+    if provider == "deepseek":
+        return os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+    if provider == "openai":
+        return os.environ.get("OPENAI_BASE_URL") or LLM_BASE_URL
+    return LLM_BASE_URL
+
+
+def _get_client(config: LLMConfig | dict | None = None):
     global _client
-    if _client is not None:
-        return _client
+    llm_config = _normalize_config(config)
+    provider = (llm_config.provider or "").lower()
+    base_url = _base_url_for_provider(provider, llm_config.base_url)
+    api_key = _api_key_for_provider(provider)
+    cache_key = (provider, base_url, api_key)
 
-    if LLM_PROVIDER == "anthropic":
+    if config is None and _client is not None:
+        return _client
+    if config is not None and cache_key in _client_cache:
+        return _client_cache[cache_key]
+
+    if provider == "anthropic":
+        if not api_key:
+            raise RuntimeError("Anthropic provider is configured but ANTHROPIC_API_KEY is not set.")
         try:
             import anthropic
         except ImportError:
             raise ImportError("pip install anthropic")
-        _client = anthropic.Anthropic(
-            api_key=LLM_API_KEY or os.environ.get("ANTHROPIC_API_KEY"),
-        )
-    elif LLM_PROVIDER == "openai":
+        client = anthropic.Anthropic(api_key=api_key)
+    elif provider in {"openai", "deepseek"}:
+        key_name = "DEEPSEEK_API_KEY" if provider == "deepseek" else "OPENAI_API_KEY"
+        if not api_key:
+            raise RuntimeError(f"{provider.title()} provider is configured but {key_name} is not set.")
         try:
             import openai
         except ImportError:
             raise ImportError("pip install openai")
-        _client = openai.OpenAI(
-            api_key=LLM_API_KEY or os.environ.get("OPENAI_API_KEY"),
-            base_url=LLM_BASE_URL,
-        )
-    elif LLM_PROVIDER == "google":
+        client = openai.OpenAI(api_key=api_key, base_url=base_url)
+    elif provider == "google":
+        if not api_key:
+            raise RuntimeError("Google provider is configured but GOOGLE_API_KEY is not set.")
         try:
             from google import genai
         except ImportError:
             raise ImportError("pip install google-genai")
-        _client = genai.Client(
-            api_key=LLM_API_KEY or os.environ.get("GOOGLE_API_KEY"),
-        )
+        client = genai.Client(api_key=api_key)
     else:
         raise RuntimeError(
-            f"Unknown LLM_PROVIDER={LLM_PROVIDER!r}. "
-            "Set LLM_PROVIDER to 'anthropic', 'openai', or 'google', "
+            f"Unknown LLM_PROVIDER={provider!r}. "
+            "Set LLM_PROVIDER to 'deepseek', 'anthropic', 'openai', or 'google', "
             "or set the corresponding API key env var for auto-detection."
         )
-    return _client
+    if config is None:
+        _client = client
+    else:
+        _client_cache[cache_key] = client
+    return client
 
 
 def _chat_anthropic(
@@ -76,8 +133,9 @@ def _chat_anthropic(
     json_schema: dict | None,
     effort: str | None,
     cache_system: bool,
+    config: LLMConfig | dict | None,
 ) -> str:
-    client = _get_client()
+    client = _get_client(config)
 
     if cache_system:
         system_param = [
@@ -111,8 +169,9 @@ def _chat_openai(
     model: str,
     max_tokens: int,
     json_schema: dict | None,
+    config: LLMConfig | dict | None,
 ) -> str:
-    client = _get_client()
+    client = _get_client(config)
 
     kwargs: dict = dict(
         model=model,
@@ -129,7 +188,9 @@ def _chat_openai(
             "json_schema": {"name": "response", "strict": True, "schema": json_schema},
         }
 
-    logging.getLogger(__name__).info("calling model=%s base_url=%s", model, LLM_BASE_URL)
+    llm_config = _normalize_config(config)
+    base_url = _base_url_for_provider((llm_config.provider or "").lower(), llm_config.base_url)
+    logging.getLogger(__name__).info("calling model=%s provider=%s base_url=%s", model, llm_config.provider, base_url)
     response = client.chat.completions.create(**kwargs)
     return response.choices[0].message.content or ""
 
@@ -161,9 +222,10 @@ def _chat_google(
     model: str,
     max_tokens: int,
     json_schema: dict | None,
+    config: LLMConfig | dict | None,
 ) -> str:
     from google.genai import types
-    client = _get_client()
+    client = _get_client(config)
 
     config_kwargs: dict = dict(
         system_instruction=system,
@@ -207,14 +269,18 @@ def describe_image(
     prompt: str,
     model: str | None = None,
     max_tokens: int = 512,
+    config: LLMConfig | dict | None = None,
 ) -> str:
     """Describe an uploaded technician photo using the configured vision model."""
+    llm_config = _normalize_config(config)
+    provider = (llm_config.provider or "").lower()
     model = model or os.environ.get("TECHNICIAN_AI_VISION_MODEL") or os.environ.get(
-        "TECHNICIAN_AI_MODEL", "gpt-4o"
+        "TECHNICIAN_AI_MODEL", llm_config.model or "gpt-4o"
     )
+    model = llm_config.model or model
 
-    if LLM_PROVIDER == "anthropic":
-        client = _get_client()
+    if provider == "anthropic":
+        client = _get_client(config)
         img_b64 = base64.b64encode(image_bytes).decode()
         response = client.messages.create(
             model=model,
@@ -237,8 +303,8 @@ def describe_image(
             ],
         )
         return next((b.text for b in response.content if b.type == "text"), "").strip()
-    elif LLM_PROVIDER == "openai":
-        client = _get_client()
+    elif provider == "openai":
+        client = _get_client(config)
         img_b64 = base64.b64encode(image_bytes).decode()
         response = client.chat.completions.create(
             model=model,
@@ -259,10 +325,10 @@ def describe_image(
             ],
         )
         return (response.choices[0].message.content or "").strip()
-    elif LLM_PROVIDER == "google":
+    elif provider == "google":
         from google.genai import types
 
-        client = _get_client()
+        client = _get_client(config)
         response = client.models.generate_content(
             model=model,
             config=types.GenerateContentConfig(max_output_tokens=max_tokens),
@@ -274,9 +340,8 @@ def describe_image(
         return (response.text or "").strip()
     else:
         raise RuntimeError(
-            f"Unknown LLM_PROVIDER={LLM_PROVIDER!r}. "
-            "Set LLM_PROVIDER to 'anthropic', 'openai', or 'google', "
-            "or set the corresponding API key env var."
+            "Photo questions require a vision-capable LLM provider/model. "
+            f"Configured provider {provider!r} is not supported for photo Ask."
         )
 
 
@@ -288,18 +353,23 @@ def chat(
     json_schema: dict | None = None,
     effort: str | None = None,
     cache_system: bool = False,
+    config: LLMConfig | dict | None = None,
 ) -> str:
-    if LLM_PROVIDER == "anthropic":
+    llm_config = _normalize_config(config)
+    provider = (llm_config.provider or "").lower()
+    model = llm_config.model or model
+
+    if provider == "anthropic":
         return _chat_anthropic(
-            system, user_message, model, max_tokens, json_schema, effort, cache_system
+            system, user_message, model, max_tokens, json_schema, effort, cache_system, config
         )
-    elif LLM_PROVIDER == "openai":
-        return _chat_openai(system, user_message, model, max_tokens, json_schema)
-    elif LLM_PROVIDER == "google":
-        return _chat_google(system, user_message, model, max_tokens, json_schema)
+    elif provider in {"openai", "deepseek"}:
+        return _chat_openai(system, user_message, model, max_tokens, json_schema, config)
+    elif provider == "google":
+        return _chat_google(system, user_message, model, max_tokens, json_schema, config)
     else:
         raise RuntimeError(
-            f"Unknown LLM_PROVIDER={LLM_PROVIDER!r}. "
-            "Set LLM_PROVIDER to 'anthropic', 'openai', or 'google', "
+            f"Unknown LLM_PROVIDER={provider!r}. "
+            "Set LLM_PROVIDER to 'deepseek', 'anthropic', 'openai', or 'google', "
             "or set the corresponding API key env var."
         )

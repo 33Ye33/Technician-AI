@@ -73,6 +73,21 @@ def _tenant_kwargs(current: auth.CurrentTenant) -> dict:
     }
 
 
+def _llm_config_for(current: auth.CurrentTenant) -> dict:
+    return db.get_factory_llm_settings(current.factory_id)
+
+
+def _llm_http_error(exc: RuntimeError) -> HTTPException:
+    detail = (
+        "The selected factory AI provider is not configured on the backend. "
+        "Check the provider API key and model environment variables."
+    )
+    message = str(exc).lower()
+    if "vision-capable" in message or "photo questions" in message:
+        detail = "Photo questions require a vision-capable LLM provider/model."
+    return HTTPException(status_code=503, detail=detail)
+
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(dotenv_path=PROJECT_ROOT / ".env", override=True)
 
@@ -179,6 +194,12 @@ class BootstrapRequest(BaseModel):
     factory_name: str
 
 
+class LlmSettingsRequest(BaseModel):
+    llm_provider: str
+    llm_model: str
+    llm_base_url: Optional[str] = None
+
+
 class ConversationRatingRequest(BaseModel):
     rating: int
     comment: Optional[str] = None
@@ -201,6 +222,30 @@ def api_auth_bootstrap(
 def api_auth_me(current: auth.CurrentTenant = Depends(auth.get_current_tenant)):
     return {"user": current.__dict__}
 
+
+@app.get("/api/settings/llm")
+def api_get_llm_settings(current: auth.CurrentTenant = Depends(auth.get_current_tenant)):
+    return {"settings": db.get_factory_llm_settings(current.factory_id)}
+
+
+@app.put("/api/settings/llm")
+def api_update_llm_settings(
+    body: LlmSettingsRequest,
+    current: auth.CurrentTenant = Depends(auth.require_org_admin),
+):
+    try:
+        settings = db.update_factory_llm_settings(
+            factory_id=current.factory_id,
+            provider=body.llm_provider,
+            model=body.llm_model,
+            base_url=body.llm_base_url,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except LookupError:
+        raise HTTPException(status_code=404, detail="factory not found")
+    return {"settings": settings}
+
 @app.post("/api/ask")
 def api_ask(
     question: str = Form(...),
@@ -210,7 +255,15 @@ def api_ask(
     question = question.strip()
     if not question:
         raise HTTPException(status_code=400, detail="empty question")
-    return rag.answer_question(question, step_by_step=step_by_step, **_tenant_kwargs(current))
+    try:
+        return rag.answer_question(
+            question,
+            step_by_step=step_by_step,
+            llm_config=_llm_config_for(current),
+            **_tenant_kwargs(current),
+        )
+    except RuntimeError as exc:
+        raise _llm_http_error(exc)
 
 
 @app.post("/api/ask/photo")
@@ -259,18 +312,23 @@ async def api_ask_photo(
             image_bytes=image_bytes,
             mime_type=content_type,
             prompt=PHOTO_OBSERVATION_PROMPT,
+            config=_llm_config_for(current),
         )
     except RuntimeError:
         raise HTTPException(
             status_code=503,
             detail="Photo questions require a vision-capable LLM provider/model.",
         )
-    return rag.answer_photo_question(
-        question,
-        observation,
-        step_by_step=step_by_step,
-        **_tenant_kwargs(current),
-    )
+    try:
+        return rag.answer_photo_question(
+            question,
+            observation,
+            step_by_step=step_by_step,
+            llm_config=_llm_config_for(current),
+            **_tenant_kwargs(current),
+        )
+    except RuntimeError as exc:
+        raise _llm_http_error(exc)
 
 
 @app.post("/api/feedback/{conversation_id}")
@@ -483,11 +541,17 @@ def api_diagnose_start(
     )
 
     machine = _detect_machine(question)
-    result = rag.diagnose_step(
-        question, history=[], session=fsm,
-        machine=machine, machine_options=_MACHINE_NAMES,
-        factory_id=current.factory_id,
-    )
+    try:
+        result = rag.diagnose_step(
+            question, history=[], session=fsm,
+            machine=machine, machine_options=_MACHINE_NAMES,
+            organization_id=current.organization_id,
+            factory_id=current.factory_id,
+            user_id=current.user_id,
+            llm_config=_llm_config_for(current),
+        )
+    except RuntimeError as exc:
+        raise _llm_http_error(exc)
 
     # The agent may identify the machine from the description on turn 1.
     machine = machine or _valid_machine(result.get("identified_machine"))
@@ -558,11 +622,17 @@ def api_diagnose_continue(
     db_history.append({"role": "user", "text": answer, "step": len(db_history) + 1})
 
     history.append({"role": "user", "content": answer})
-    result = rag.diagnose_step(
-        question, history, session=fsm,
-        machine=machine, machine_options=_MACHINE_NAMES, escalate=escalate,
-        factory_id=current.factory_id,
-    )
+    try:
+        result = rag.diagnose_step(
+            question, history, session=fsm,
+            machine=machine, machine_options=_MACHINE_NAMES, escalate=escalate,
+            organization_id=current.organization_id,
+            factory_id=current.factory_id,
+            user_id=current.user_id,
+            llm_config=_llm_config_for(current),
+        )
+    except RuntimeError as exc:
+        raise _llm_http_error(exc)
 
     # Capture the machine once the agent (or the reply) makes it clear.
     if not machine:

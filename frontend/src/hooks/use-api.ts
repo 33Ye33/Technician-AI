@@ -8,6 +8,7 @@ import type {
   FeedbackResponse,
   IngestResponse,
   KnowledgeEntry,
+  LlmSettings,
   Topic,
 } from "@/types/api";
 import { getApiAccessToken } from "@/lib/api-auth";
@@ -39,6 +40,16 @@ async function get<T>(url: string): Promise<T> {
 
 async function httpDelete<T>(url: string): Promise<T> {
   const res = await fetch(url, { method: "DELETE", headers: authHeaders() });
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  return res.json();
+}
+
+async function putJson<T>(url: string, body: unknown): Promise<T> {
+  const res = await fetch(url, {
+    method: "PUT",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(body),
+  });
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
   return res.json();
 }
@@ -138,6 +149,11 @@ export const api = {
     }),
 
   me: () => get<{ user: AuthUserContext }>("/api/auth/me"),
+
+  llmSettings: () => get<{ settings: LlmSettings }>("/api/settings/llm"),
+
+  updateLlmSettings: (settings: LlmSettings) =>
+    putJson<{ settings: LlmSettings }>("/api/settings/llm", settings),
 };
 
 export interface AuthUserContext {

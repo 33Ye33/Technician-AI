@@ -12,6 +12,7 @@ import numpy as np
 
 EMBED_DIM = int(os.environ.get("EMBED_DIM", "512"))
 DB_PATH = os.environ.get("TECHNICIAN_AI_DB", "./data/tech.db")
+VALID_LLM_PROVIDERS = {"deepseek", "openai", "google", "anthropic"}
 
 
 def _pack(vec: list[float] | None) -> bytes | None:
@@ -46,6 +47,9 @@ def init_db() -> None:
                 id TEXT PRIMARY KEY,
                 organization_id TEXT NOT NULL,
                 name TEXT NOT NULL,
+                llm_provider TEXT,
+                llm_model TEXT,
+                llm_base_url TEXT,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (organization_id) REFERENCES organizations(id)
             );
@@ -143,6 +147,15 @@ def init_db() -> None:
 
         _ensure_columns(
             conn,
+            "factories",
+            [
+                ("llm_provider", "TEXT"),
+                ("llm_model", "TEXT"),
+                ("llm_base_url", "TEXT"),
+            ],
+        )
+        _ensure_columns(
+            conn,
             "documents",
             [
                 ("organization_id", "TEXT"),
@@ -197,6 +210,40 @@ def _ensure_columns(conn: sqlite3.Connection, table: str, columns: list[tuple[st
     conn.commit()
 
 
+def default_llm_settings() -> dict:
+    """Return the default provider/model for a new or unconfigured factory."""
+    provider = (os.environ.get("LLM_PROVIDER") or "").strip().lower()
+    if not provider:
+        if os.environ.get("DEEPSEEK_API_KEY"):
+            provider = "deepseek"
+        elif os.environ.get("ANTHROPIC_API_KEY"):
+            provider = "anthropic"
+        elif os.environ.get("OPENAI_API_KEY"):
+            provider = "openai"
+        elif os.environ.get("GOOGLE_API_KEY"):
+            provider = "google"
+    if provider not in VALID_LLM_PROVIDERS:
+        provider = "openai"
+
+    model_by_provider = {
+        "deepseek": os.environ.get("DEEPSEEK_MODEL", "deepseek-chat"),
+        "openai": os.environ.get("OPENAI_MODEL") or os.environ.get("TECHNICIAN_AI_MODEL", "gpt-4o-mini"),
+        "google": os.environ.get("GOOGLE_MODEL") or os.environ.get("TECHNICIAN_AI_MODEL", "gemini-2.0-flash"),
+        "anthropic": os.environ.get("ANTHROPIC_MODEL") or os.environ.get("TECHNICIAN_AI_MODEL", "claude-opus-4-7"),
+    }
+    base_url_by_provider = {
+        "deepseek": os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
+        "openai": os.environ.get("OPENAI_BASE_URL") or os.environ.get("LLM_BASE_URL"),
+        "google": None,
+        "anthropic": None,
+    }
+    return {
+        "llm_provider": provider or None,
+        "llm_model": model_by_provider.get(provider),
+        "llm_base_url": base_url_by_provider.get(provider),
+    }
+
+
 def create_signup_workspace(
     *,
     supabase_user_id: str,
@@ -235,13 +282,25 @@ def create_signup_workspace(
         organization_id = str(uuid.uuid4())
         factory_id = str(uuid.uuid4())
         membership_id = str(uuid.uuid4())
+        llm_defaults = default_llm_settings()
         conn.execute(
             "INSERT INTO organizations (id, name) VALUES (?, ?)",
             (organization_id, organization_name),
         )
         conn.execute(
-            "INSERT INTO factories (id, organization_id, name) VALUES (?, ?, ?)",
-            (factory_id, organization_id, factory_name),
+            """
+            INSERT INTO factories
+                (id, organization_id, name, llm_provider, llm_model, llm_base_url)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                factory_id,
+                organization_id,
+                factory_name,
+                llm_defaults["llm_provider"],
+                llm_defaults["llm_model"],
+                llm_defaults["llm_base_url"],
+            ),
         )
         conn.execute(
             "INSERT INTO users (id, supabase_user_id, email) VALUES (?, ?, ?)",
@@ -301,6 +360,67 @@ def _context_from_row(row) -> dict:
         "factory_name": row["factory_name"],
         "role": row["role"],
     }
+
+
+def get_factory_llm_settings(factory_id: str | None) -> dict:
+    defaults = default_llm_settings()
+    if not factory_id:
+        return defaults
+    init_db()
+    conn = connect()
+    try:
+        row = conn.execute(
+            """
+            SELECT llm_provider, llm_model, llm_base_url
+            FROM factories
+            WHERE id = ?
+            """,
+            (factory_id,),
+        ).fetchone()
+    finally:
+        conn.close()
+    if row is None:
+        return defaults
+    provider = (row["llm_provider"] or defaults["llm_provider"] or "").strip().lower()
+    if provider not in VALID_LLM_PROVIDERS:
+        provider = defaults["llm_provider"]
+    return {
+        "llm_provider": provider,
+        "llm_model": (row["llm_model"] or defaults["llm_model"] or "").strip() or None,
+        "llm_base_url": (row["llm_base_url"] or defaults["llm_base_url"] or "").strip() or None,
+    }
+
+
+def update_factory_llm_settings(
+    *,
+    factory_id: str,
+    provider: str,
+    model: str,
+    base_url: str | None = None,
+) -> dict:
+    provider = provider.strip().lower()
+    model = model.strip()
+    base_url = (base_url or "").strip() or None
+    if provider not in VALID_LLM_PROVIDERS:
+        raise ValueError("invalid LLM provider")
+    if not model:
+        raise ValueError("model name is required")
+    conn = connect()
+    try:
+        cur = conn.execute(
+            """
+            UPDATE factories
+            SET llm_provider = ?, llm_model = ?, llm_base_url = ?
+            WHERE id = ?
+            """,
+            (provider, model, base_url, factory_id),
+        )
+        conn.commit()
+        if cur.rowcount == 0:
+            raise LookupError("factory not found")
+    finally:
+        conn.close()
+    return get_factory_llm_settings(factory_id)
 
 
 def insert_document(
