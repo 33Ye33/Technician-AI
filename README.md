@@ -19,7 +19,7 @@ factory-level AI provider selection.
 [![SQLite](https://img.shields.io/badge/SQLite-local%20prototype-003B57?style=flat-square&logo=sqlite&logoColor=white)](https://www.sqlite.org/)
 [![PWA](https://img.shields.io/badge/PWA-mobile--ready-5A0FC8?style=flat-square)](https://web.dev/progressive-web-apps/)
 
-[Quickstart](#quickstart) | [Recent Updates](#recent-major-updates) | [Demo Walkthrough](#demo-walkthrough) | [Architecture](#architecture) | [API Overview](#api-overview)
+[Quickstart](#quickstart) | [Recent Updates](#recent-major-updates) | [Demo Walkthrough](#demo-walkthrough) | [Deployment Guide](docs/DEPLOYMENT.md) | [Architecture](#architecture) | [API Overview](#api-overview)
 
 ## What It Does
 
