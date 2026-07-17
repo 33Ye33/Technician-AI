@@ -144,9 +144,14 @@ http://127.0.0.1:8000/**
 The current frontend uses direct email/password Auth calls. Redirect URLs mainly
 matter for email confirmation, password recovery, and future OAuth flows.
 
-If signup returns `Email not confirmed`, either confirm the email through the
-Supabase email link or adjust Supabase's email confirmation setting for your
-demo.
+For public demo testing, you can disable email confirmation in Supabase:
+
+```text
+Authentication -> Providers -> Email -> disable email confirmation
+```
+
+For production, email confirmation should stay enabled. If confirmation is
+enabled, users must click the Supabase confirmation email before logging in.
 
 ## 5. Post-Deploy Test Checklist
 

@@ -18,7 +18,7 @@ interface AuthContextValue {
     password: string,
     organizationName: string,
     factoryName: string,
-  ) => Promise<void>;
+  ) => Promise<{ confirmationRequired: boolean }>;
   createWorkspace: (organizationName: string, factoryName: string) => Promise<void>;
   signOut: () => void;
 }
@@ -47,7 +47,13 @@ async function supabaseAuth(path: string, body: Record<string, unknown>) {
   });
   const data = await res.json();
   if (!res.ok) {
-    throw new Error(data?.msg || data?.error_description || data?.message || "Authentication failed");
+    const message = data?.msg || data?.error_description || data?.message || "Authentication failed";
+    if (typeof message === "string" && message.toLowerCase().includes("email not confirmed")) {
+      throw new Error(
+        "Please check your email and click the confirmation link before logging in. If this is a demo deployment, the admin can disable email confirmation in Supabase Auth settings.",
+      );
+    }
+    throw new Error(message);
   }
   return data;
 }
@@ -127,11 +133,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const data = await supabaseAuth("signup", { email, password });
     let next = data as AuthSession;
     if (!next.access_token) {
-      next = await supabaseAuth("token?grant_type=password", { email, password }) as AuthSession;
+      return { confirmationRequired: true };
     }
     setSession(next);
     saveSession(next);
     await createWorkspace(organizationName, factoryName);
+    return { confirmationRequired: false };
   }
 
   function signOut() {

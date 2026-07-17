@@ -11,6 +11,7 @@ export function AuthScreen() {
   const [organizationName, setOrganizationName] = useState("");
   const [factoryName, setFactoryName] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const needsWorkspace = Boolean(session && !user);
   const workspaceMode = mode === "signup" || needsWorkspace;
@@ -18,12 +19,18 @@ export function AuthScreen() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    setSuccess(null);
     setLoading(true);
     try {
       if (needsWorkspace) {
         await createWorkspace(organizationName, factoryName);
       } else if (mode === "signup") {
-        await signUp(email, password, organizationName, factoryName);
+        const result = await signUp(email, password, organizationName, factoryName);
+        if (result.confirmationRequired) {
+          setSuccess("Account created. Please check your email to confirm your account, then log in.");
+          setPassword("");
+          setMode("login");
+        }
       } else {
         await signIn(email, password);
       }
@@ -94,6 +101,11 @@ export function AuthScreen() {
             {error}
           </p>
         )}
+        {success && (
+          <p className="mt-3 rounded-md border border-primary/40 bg-primary/10 px-3 py-2 text-sm text-primary">
+            {success}
+          </p>
+        )}
 
         <Button type="submit" className="mt-5 w-full" disabled={loading}>
           {loading ? "Please wait..." : workspaceMode ? "Create workspace" : "Log in"}
@@ -110,7 +122,11 @@ export function AuthScreen() {
           <button
             type="button"
             className="mt-4 w-full text-sm text-muted-foreground hover:text-foreground"
-            onClick={() => setMode(mode === "signup" ? "login" : "signup")}
+            onClick={() => {
+              setError(null);
+              setSuccess(null);
+              setMode(mode === "signup" ? "login" : "signup");
+            }}
           >
             {mode === "signup"
               ? "Already have an account? Log in"
